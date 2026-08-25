@@ -431,6 +431,11 @@ function readBody(req) {
 async function handle(req, res, pathname, query) {
   const seg = pathname.split('/').filter(Boolean);
 
+  /* ── Bootstrap (للتحقق من الاتصال) ── */
+  if (pathname === '/api/bootstrap' && req.method === 'POST') {
+    return json(res, 200, { ok: true });
+  }
+
   /* ── TTS ── */
   if (req.method === 'GET' && pathname === '/api/tts') return handleTts(req, res, query);
 
@@ -664,7 +669,7 @@ async function handle(req, res, pathname, query) {
      ══════════════════════════════════════════════ */
 
   /* ── العيادات (عام) ── */
-  if (seg[1] === 'clinics' && !seg[1].startsWith('admin') && !seg[1].startsWith('clinic')) {
+  if (seg[1] === 'clinics' && !pathname.startsWith('/api/admin/') && !pathname.startsWith('/api/clinic/')) {
     if (req.method === 'GET' && seg.length === 2) {
       return json(res, 200, all(`SELECT * FROM clinics WHERE activated=1 AND is_open=1 ORDER BY rating DESC`).map(mapClinic));
     }
