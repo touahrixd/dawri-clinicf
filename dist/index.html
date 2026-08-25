@@ -15,32 +15,48 @@
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
     <script type="module" crossorigin src="/assets/index-egIjzhA5.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-CyGRkLFq.css">
+    <style>
+      #clinicTopBar { display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:linear-gradient(135deg,#0f766e,#059669); color:#fff; padding:10px 20px; font-family:'Tajawal',system-ui,sans-serif; align-items:center; justify-content:space-between; }
+      #clinicTopBar.visible { display:flex; }
+      #clinicTopBar .name { font-size:16px; font-weight:700; }
+      #clinicTopBar .tag { font-size:12px; opacity:.85; }
+      #clinicTopBar button { background:rgba(255,255,255,.2); color:#fff; border:none; padding:6px 14px; border-radius:8px; font-size:12px; cursor:pointer; font-family:inherit; }
+
+      #settingsSection { display:none; font-family:'Tajawal',system-ui,sans-serif; padding:16px; padding-bottom:100px; }
+      #settingsSection.visible { display:block; }
+      #settingsSection .s-card { background:#fff; border-radius:16px; padding:20px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+      #settingsSection .s-title { font-size:15px; font-weight:700; color:#0f766e; margin-bottom:12px; }
+      #settingsSection .s-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #f1f5f9; }
+      #settingsSection .s-row:last-child { border-bottom:none; }
+      #settingsSection .s-label { font-size:13px; color:#64748b; }
+      #settingsSection .s-value { font-size:14px; font-weight:600; color:#1e293b; }
+      #settingsSection .s-btn { width:100%; padding:12px; border:none; border-radius:10px; font-size:15px; font-weight:600; font-family:inherit; cursor:pointer; margin-top:8px; }
+      #settingsSection .s-btn-act { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; }
+      #settingsSection .s-btn-out { background:#fee2e2; color:#dc2626; }
+      #settingsSection .s-btn-login { background:linear-gradient(135deg,#0f766e,#059669); color:#fff; }
+
+      #settingsSection .act-fields input { width:100%; padding:10px 14px; border:2px solid #e2e8f0; border-radius:10px; font-size:14px; font-family:inherit; outline:none; margin-bottom:10px; box-sizing:border-box; }
+      #settingsSection .act-fields input:focus { border-color:#0f766e; }
+      #settingsSection .act-fields label { display:block; font-size:12px; font-weight:600; color:#64748b; margin-bottom:3px; }
+      #settingsSection .act-err { color:#ef4444; font-size:13px; margin-top:6px; text-align:center; min-height:18px; }
+      #settingsSection .act-ok { color:#059669; font-size:13px; margin-top:6px; text-align:center; font-weight:600; }
+
+      #activateModal { display:none; position:fixed; inset:0; z-index:100000; background:rgba(0,0,0,.5); align-items:center; justify-content:center; padding:20px; }
+      #activateModal .act-card { background:#fff; border-radius:20px; padding:28px; width:min(420px,95vw); max-height:85vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,.2); font-family:'Tajawal',system-ui,sans-serif; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
 
-    <!-- زر التنشيط (يظهر فقط إذا لم تُفعّل العيادة) -->
-    <button id="activateFab" title="تفعيل العيادة"
-      style="display:none;position:fixed;bottom:24px;left:24px;z-index:9999;width:56px;height:56px;border-radius:50%;
-      background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;font-size:24px;border:none;cursor:pointer;
-      box-shadow:0 4px 16px rgba(245,158,11,.4);transition:transform .2s"
-      onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-      🔑
-    </button>
-
     <!-- شريط اسم العيادة -->
-    <div id="clinicTopBar" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;
-      background:linear-gradient(135deg,#0f766e,#059669);color:#fff;padding:10px 20px;
-      font-family:'Tajawal',system-ui,sans-serif;align-items:center;justify-content:space-between">
-      <div><div style="font-size:16px;font-weight:700" id="barName"></div><div style="font-size:12px;opacity:.85" id="barTag"></div></div>
-      <button onclick="deactivate()" style="background:rgba(255,255,255,.2);color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit">خروج</button>
+    <div id="clinicTopBar">
+      <div><div class="name" id="barName"></div><div class="tag" id="barTag"></div></div>
+      <button onclick="deactivate()">خروج</button>
     </div>
 
     <!-- نافذة التنشيط -->
-    <div id="activateModal" style="display:none;position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.5);
-      align-items:center;justify-content:center;padding:20px">
-      <div style="background:#fff;border-radius:20px;padding:28px;width:min(420px,95vw);max-height:85vh;overflow-y:auto;
-        box-shadow:0 8px 32px rgba(0,0,0,.2);font-family:'Tajawal',system-ui,sans-serif">
+    <div id="activateModal">
+      <div class="act-card" onclick="event.stopPropagation()">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
           <h2 style="font-size:20px;font-weight:700;color:#0f766e;margin:0">🔑 تفعيل العيادة</h2>
           <button onclick="closeActivate()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b">✕</button>
@@ -67,37 +83,100 @@
           <input id="actPass2" type="password" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="أعد إدخال كلمة المرور"/>
         </div>
         <button onclick="doActivate()" style="width:100%;padding:12px;background:linear-gradient(135deg,#0f766e,#059669);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer">✅ تفعيل</button>
-        <div id="actErr" style="color:#ef4444;font-size:13px;margin-top:8px;min-height:18px;text-align:center"></div>
-        <div id="actOk" style="color:#059669;font-size:14px;margin-top:10px;font-weight:600;text-align:center"></div>
+        <div id="actErr" class="act-err"></div>
+        <div id="actOk" class="act-ok"></div>
+      </div>
+    </div>
+
+    <!-- قسم الإعدادات (يُحقن داخل React بعد التحميل) -->
+    <div id="settingsSection">
+      <div class="s-card">
+        <div class="s-title">⚙️ إعدادات العيادة</div>
+        <div id="settingsContent"></div>
       </div>
     </div>
 
     <script type="module">
       const API = location.origin + '/api';
-      const fab = document.getElementById('activateFab');
-      const modal = document.getElementById('activateModal');
       const topBar = document.getElementById('clinicTopBar');
+      const modal = document.getElementById('activateModal');
+      const settingsSection = document.getElementById('settingsSection');
+      const settingsContent = document.getElementById('settingsContent');
 
       const clinicToken = localStorage.getItem('clinicToken');
       const clinicId = localStorage.getItem('clinicId');
       const clinicName = localStorage.getItem('clinicName');
 
-      if (clinicToken && clinicId && clinicName) {
-        /* مُنشّط بالفعل */
+      const isActivated = !!(clinicToken && clinicId && clinicName);
+
+      if (isActivated) {
         showTopBar(clinicName, localStorage.getItem('clinicTagline') || '');
         interceptFetch(clinicToken);
+        renderSettingsActivated();
       } else {
-        /* غير مُنشّط — إظهار زر التنشيط بعد تحميل الواجهة */
-        setTimeout(() => { fab.style.display = 'flex'; }, 3000);
+        renderSettingsNotActivated();
       }
 
+      /* ── حقن قسم الإعدادات في DOM بعد تحميل React ── */
+      injectSettings();
+      function injectSettings() {
+        const root = document.getElementById('root');
+        if (!root) { setTimeout(injectSettings, 500); return; }
+        const observer = new MutationObserver(() => {
+          const main = root.querySelector('main, [class*="pb-"], [class*="pt-"]') || root.children[0];
+          if (main && main.children.length > 0) {
+            observer.disconnect();
+            const spacer = document.createElement('div');
+            spacer.style.height = '80px';
+            main.appendChild(spacer);
+            main.appendChild(settingsSection);
+            settingsSection.classList.add('visible');
+          }
+        });
+        observer.observe(root, { childList: true, subtree: true });
+        /* fallback */
+        setTimeout(() => {
+          if (!settingsSection.classList.contains('visible')) {
+            root.appendChild(settingsSection);
+            settingsSection.classList.add('visible');
+          }
+        }, 4000);
+      }
+
+      function renderSettingsNotActivated() {
+        settingsContent.innerHTML = `
+          <div style="text-align:center;padding:20px 0">
+            <div style="font-size:40px;margin-bottom:8px">🔑</div>
+            <div style="font-size:15px;font-weight:600;color:#1e293b;margin-bottom:4px">العيادة غير مُفعّلة</div>
+            <div style="font-size:13px;color:#64748b;margin-bottom:16px">أدخل كود التفعيل لتبدأ استخدام اللوحة</div>
+            <button id="settingsActBtn" class="s-btn s-btn-act">تفعيل العيادة</button>
+          </div>
+        `;
+        document.getElementById('settingsActBtn').onclick = openActivate;
+      }
+
+      function renderSettingsActivated() {
+        const tagline = localStorage.getItem('clinicTagline') || '';
+        settingsContent.innerHTML = `
+          <div class="s-row"><span class="s-label">اسم العيادة</span><span class="s-value">${clinicName}</span></div>
+          ${tagline ? `<div class="s-row"><span class="s-label">الشعار</span><span class="s-value">${tagline}</span></div>` : ''}
+          <div class="s-row"><span class="s-label">الحالة</span><span class="s-value" style="color:#059669">✅ مُفعّلة</span></div>
+          <button id="settingsActBtn" class="s-btn s-btn-login" style="margin-top:12px">🔄 تحديث</button>
+          <button id="settingsOutBtn" class="s-btn s-btn-out" style="margin-top:8px">تسجيل الخروج وتعطيل</button>
+        `;
+        document.getElementById('settingsActBtn').onclick = () => location.reload();
+        document.getElementById('settingsOutBtn').onclick = deactivate;
+      }
+
+      /* ── Top Bar ── */
       function showTopBar(name, tag) {
         document.getElementById('barName').textContent = name;
         document.getElementById('barTag').textContent = tag;
-        topBar.style.display = 'flex';
+        topBar.classList.add('visible');
         document.body.style.paddingTop = '52px';
       }
 
+      /* ── Intercept Fetch ── */
       function interceptFetch(token) {
         const origFetch = window.fetch;
         window.fetch = function(url, opts = {}) {
@@ -108,9 +187,9 @@
         };
       }
 
+      /* ── Activation Modal ── */
       window.openActivate = function() { modal.style.display = 'flex'; };
       window.closeActivate = function() { modal.style.display = 'none'; };
-
       modal.addEventListener('click', function(e) { if (e.target === this) closeActivate(); });
 
       window.doActivate = async function() {
@@ -142,14 +221,7 @@
 
           okEl.textContent = '✅ تم التفعيل! جاري التحديث...';
           errEl.textContent = '';
-
-          setTimeout(() => {
-            closeActivate();
-            fab.style.display = 'none';
-            showTopBar(d.name || name, tag);
-            interceptFetch(d.token);
-            location.reload();
-          }, 1000);
+          setTimeout(() => { location.reload(); }, 1000);
         } catch { errEl.textContent = 'خطأ في الاتصال بالسيرفر'; }
       };
 
@@ -158,12 +230,9 @@
         localStorage.removeItem('clinicId');
         localStorage.removeItem('clinicName');
         localStorage.removeItem('clinicTagline');
-        topBar.style.display = 'none';
-        document.body.style.paddingTop = '0';
-        setTimeout(() => { fab.style.display = 'flex'; }, 1000);
+        location.reload();
       };
 
-      fab.addEventListener('click', openActivate);
       document.getElementById('actPass2')?.addEventListener('keydown', e => { if (e.key === 'Enter') doActivate(); });
     </script>
   </body>
