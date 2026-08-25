@@ -27,7 +27,7 @@
 
     <!-- زر الإعدادات العائم -->
     <button id="settingsFab" onclick="openSettings()" title="إعدادات العيادة"
-      style="display:none;position:fixed;bottom:24px;left:24px;z-index:9999;width:56px;height:56px;border-radius:50%;
+      style="display:flex;position:fixed;bottom:24px;left:24px;z-index:9999;width:56px;height:56px;border-radius:50%;
       background:linear-gradient(135deg,#0f766e,#059669);color:#fff;font-size:24px;border:none;cursor:pointer;
       box-shadow:0 4px 16px rgba(15,118,110,.4);transition:transform .2s"
       onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
@@ -78,11 +78,6 @@
 
     <script type="module">
       const API = window.DAWRI_API_BASE || (location.origin + '/api');
-
-      /* إظهار زر الإعدادات بعد تحميل الواجهة */
-      setTimeout(() => {
-        document.getElementById('settingsFab').style.display = 'flex';
-      }, 3000);
 
       /* فتح/إغلاق النافذة */
       window.openSettings = function () {
