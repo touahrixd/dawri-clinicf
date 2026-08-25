@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>لوحة إدارة دوري — الأدمين</title>
+<meta name="theme-color" content="#1e293b"/>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Tajawal',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100dvh}
+.hidden{display:none!important}
+
+.login-page{display:flex;align-items:center;justify-content:center;min-height:100dvh}
+.login-box{background:#1e293b;border-radius:20px;padding:36px;width:min(400px,90vw);text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.login-box h1{font-size:26px;font-weight:800;margin-bottom:6px}
+.login-box p{color:#94a3b8;margin-bottom:24px}
+input{font-family:inherit;border:2px solid #334155;border-radius:12px;padding:12px 16px;font-size:16px;width:100%;background:#0f172a;color:#e2e8f0;outline:none}
+input:focus{border-color:#06b6d4}
+.btn{font-family:inherit;border:none;border-radius:12px;padding:12px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;transition:all .15s}
+.btn-cyan{background:#06b6d4;color:#0f172a}
+.btn-cyan:hover{background:#22d3ee}
+.btn-red{background:#ef4444;color:#fff;font-size:13px;padding:6px 14px;width:auto;border-radius:8px}
+.btn-ghost{background:none;color:#94a3b8;font-size:14px;padding:8px;margin-top:12px}
+.error{color:#f87171;font-size:14px;margin-top:8px;min-height:20px}
+
+.admin{display:none}
+.top-bar{background:#1e293b;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;position:sticky;top:0;z-index:10}
+.top-bar h1{font-size:18px;font-weight:700}
+.top-bar button{background:#334155;color:#e2e8f0;font-size:13px;padding:8px 16px;border:none;border-radius:8px;cursor:pointer}
+.content{padding:16px;max-width:900px;margin:0 auto}
+
+.add-card{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:20px;margin-bottom:20px}
+.add-card h3{font-size:16px;font-weight:700;color:#06b6d4;margin-bottom:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.full{grid-column:1/-1}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:4px}
+.result-box{background:#064e3b;border:1px solid #10b981;border-radius:12px;padding:16px;margin-top:14px;text-align:center;display:none}
+.result-box h4{color:#34d399;margin-bottom:8px}
+.result-box .code{font-size:22px;font-weight:800;color:#fbbf24;letter-spacing:2px;direction:ltr}
+.result-box .id{font-size:14px;color:#94a3b8;margin-top:6px}
+.result-box .copy{background:#10b981;color:#fff;border:none;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-top:10px}
+
+.clinics-list{display:flex;flex-direction:column;gap:10px}
+.clinic-item{background:#1e293b;border:1px solid #334155;border-radius:14px;padding:16px;display:flex;justify-content:space-between;align-items:start}
+.clinic-item .info .name{font-size:16px;font-weight:700}
+.clinic-item .info .spec{color:#94a3b8;font-size:13px}
+.clinic-item .info .status{font-size:12px;margin-top:4px}
+.clinic-item .info .status.on{color:#34d399}
+.clinic-item .info .status.off{color:#fbbf24}
+.clinic-item .actions{display:flex;flex-direction:column;gap:6px;align-items:end}
+.btn-sm{font-size:12px;padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-weight:600}
+.btn-del{background:#7f1d1d;color:#fca5a5}
+.btn-del:hover{background:#991b1b}
+.btn-toggle{background:#1e3a5f;color:#93c5fd}
+.btn-toggle:hover{background:#1e40af}
+.empty{color:#64748b;text-align:center;padding:40px}
+h3{color:#94a3b8;font-size:14px;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="loginPage" class="login-page">
+  <div class="login-box">
+    <h1>⚙️ إدارة دوري</h1>
+    <p>لوحة الأدمين — إدارة العيادات والاشتراكات</p>
+    <input id="pinInput" type="password" inputmode="numeric" placeholder="رمز الأدمين"/>
+    <button class="btn btn-cyan" onclick="login()" style="margin-top:12px">دخول</button>
+    <div class="error" id="errEl"></div>
+  </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div id="adminPage" class="admin">
+  <div class="top-bar">
+    <h1>⚙️ إدارة العيادات</h1>
+    <button onclick="logout()">خروج</button>
+  </div>
+  <div class="content">
+    <!-- Add Clinic -->
+    <div class="add-card">
+      <h3>➕ إضافة عيادة (إنشاء اشتراك)</h3>
+      <div class="row">
+        <div class="field"><label>اسم العيادة *</label><input id="f-name" placeholder="عيادة الشفاء الطبية"/></div>
+        <div class="field"><label>التخصص *</label><input id="f-spec" placeholder="طب عام"/></div>
+        <div class="field"><label>المدينة</label><input id="f-city" placeholder="الجزائر"/></div>
+        <div class="field"><label>الهاتف</label><input id="f-phone" placeholder="0555123400"/></div>
+        <div class="field full"><label>العنوان</label><input id="f-addr" placeholder="شارع... حي..."/></div>
+        <div class="field"><label>رسوم الكشفية (دج)</label><input id="f-fee" type="number" value="200"/></div>
+        <div class="field"><label>العمولة (%)</label><input id="f-comm" type="number" value="50"/></div>
+      </div>
+      <button class="btn btn-cyan" onclick="addClinic()">➕ إنشاء الاشتراك</button>
+      <div class="result-box" id="resultBox">
+        <h4>✅ تم إنشاء الاشتراك!</h4>
+        <div>معرّف العيادة:</div>
+        <div class="id" id="resId"></div>
+        <div style="margin-top:8px">كود التفعيل (أرسله للعيادة):</div>
+        <div class="code" id="resCode"></div>
+        <button class="copy" onclick="copyCode()">📋 نسخ الكود</button>
+      </div>
+    </div>
+
+    <!-- Clinics List -->
+    <h3>📋 جميع العيادات</h3>
+    <div class="clinics-list" id="clinicsList">
+      <div class="empty">لا توجد عيادات بعد</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.origin + '/api';
+let token = localStorage.getItem('adminToken') || '';
+
+async function login() {
+  const pin = document.getElementById('pinInput').value.trim();
+  try {
+    const r = await fetch(API + '/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('errEl').textContent = d.error; return; }
+    token = d.token;
+    localStorage.setItem('adminToken', token);
+    showAdmin();
+  } catch { document.getElementById('errEl').textContent = 'خطأ في الاتصال'; }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('adminToken');
+  document.getElementById('adminPage').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+function showAdmin() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('adminPage').style.display = 'block';
+  loadClinics();
+}
+
+async function loadClinics() {
+  try {
+    const r = await fetch(API + '/admin/clinics', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (r.status === 401) { logout(); return; }
+    const clinics = await r.json();
+    const el = document.getElementById('clinicsList');
+    if (!clinics.length) { el.innerHTML = '<div class="empty">لا توجد عيادات بعد</div>'; return; }
+    el.innerHTML = clinics.map(c => `
+      <div class="clinic-item">
+        <div class="info">
+          <div class="name">${c.name || '(لم يُفعّل بعد)'}</div>
+          <div class="spec">${c.specialty || ''} — ${c.city || ''}</div>
+          <div class="status ${c.activated ? 'on' : 'off'}">${c.activated ? '✅ مفعّلة — ' + c.name : '⏳ في انتظار التفعيل'}</div>
+          ${!c.activated ? '<div style="margin-top:4px;font-size:12px;color:#fbbf24">🔑 كود: ' + (c.activationCode || '—') + '</div>' : ''}
+          <div style="margin-top:4px;font-size:11px;color:#64748b">ID: ${c.id}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-sm btn-toggle" onclick="toggleOpen('${c.id}', ${!c.isOpen})">${c.isOpen ? '🔒 إغلاق' : '🔓 فتح'}</button>
+          <button class="btn-sm btn-del" onclick="deleteClinic('${c.id}','${(c.name||'').replace(/'/g,"\\'")}')">🗑️ حذف</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+async function addClinic() {
+  const body = {
+    name: document.getElementById('f-name').value.trim(),
+    specialty: document.getElementById('f-spec').value.trim(),
+    city: document.getElementById('f-city').value.trim(),
+    phone: document.getElementById('f-phone').value.trim(),
+    address: document.getElementById('f-addr').value.trim(),
+    fee: Number(document.getElementById('f-fee').value) || 200,
+    commission: Number(document.getElementById('f-comm').value) || 50,
+  };
+  if (!body.name || !body.specialty) { alert('اسم العيادة والتخصص مطلوبان'); return; }
+  try {
+    const r = await fetch(API + '/admin/clinics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error); return; }
+    document.getElementById('resId').textContent = d.id;
+    document.getElementById('resCode').textContent = d.activationCode;
+    document.getElementById('resultBox').style.display = 'block';
+    ['f-name','f-spec','f-city','f-phone','f-addr'].forEach(id => document.getElementById(id).value = '');
+    loadClinics();
+  } catch (e) { alert('خطأ: ' + e.message); }
+}
+
+function copyCode() {
+  const code = document.getElementById('resCode').textContent;
+  navigator.clipboard.writeText(code).then(() => alert('تم النسخ!'));
+}
+
+async function toggleOpen(id, open) {
+  await fetch(API + '/clinics/' + id, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ isOpen: open }),
+  });
+  loadClinics();
+}
+
+async function deleteClinic(id, name) {
+  if (!confirm('حذف عيادة "' + name + '"?')) return;
+  const r = await fetch(API + '/admin/clinics/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({ id }),
+  });
+  if (r.ok) loadClinics();
+}
+
+// Auto-login
+if (token) showAdmin();
+document.getElementById('pinInput').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+</script>
+</body>
+</html>

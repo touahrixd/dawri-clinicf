@@ -702,16 +702,20 @@ async function handle(req, res, pathname, query) {
   /* ── الحجوزات ── */
   if (pathname === '/api/bookings' && req.method === 'POST') {
     const body = await readBody(req);
-    return json(res, 200, createWalkinTicket(body));
+    const scopeId = getClinicId(req);
+    return json(res, 200, createWalkinTicket({ ...body, doctorId: body.doctorId || body.clinicId || scopeId }));
   }
 
   if (pathname === '/api/walkin' && req.method === 'POST') {
     const body = await readBody(req);
-    return json(res, 200, createWalkinTicket(body));
+    const scopeId = getClinicId(req);
+    return json(res, 200, createWalkinTicket({ ...body, doctorId: body.doctorId || scopeId }));
   }
 
   if (pathname === '/api/bookings' && req.method === 'GET') {
+    const scopeId = getClinicId(req);
     const clauses = []; const params = [];
+    if (scopeId) { clauses.push('b.clinic_id=?'); params.push(scopeId); }
     if (query.get('date')) { clauses.push('b.date=?'); params.push(query.get('date')); }
     if (query.get('doctorId')) { clauses.push('b.clinic_id=?'); params.push(query.get('doctorId')); }
     if (query.get('phone')) { clauses.push('b.whatsapp=?'); params.push(query.get('phone')); }
@@ -745,18 +749,29 @@ async function handle(req, res, pathname, query) {
 
   if (pathname === '/api/queue/call-next' && req.method === 'POST') {
     const body = await readBody(req);
-    return json(res, 200, callNextPatient(body?.doctorId, body?.date));
+    const scopeId = getClinicId(req);
+    return json(res, 200, callNextPatient(body?.doctorId || scopeId, body?.date));
   }
 
-  /* ── Dashboard قديم (للتوافق) ── */
+  /* ── Dashboard (يُقيّد بالعيادة إذا كان التوكن موجودًا) ── */
   if (pathname === '/api/dashboard' && req.method === 'GET') {
     const date = query.get('date');
     if (!isDateStr(date)) fail('التاريخ غير صحيح.');
-    const [settings, doctors, bookings] = [
-      getSettings(),
-      all(`SELECT * FROM clinics WHERE activated=1 ORDER BY name`).map(mapDoctor),
-      all(`${BOOKING_SELECT} WHERE b.date=? ORDER BY b.queue_number`, date).map(mapClinicBooking),
-    ];
+    const scopeClinicId = getClinicId(req);
+    let doctors, bookings;
+    if (scopeClinicId) {
+      const cl = get(`SELECT * FROM clinics WHERE id=?`, scopeClinicId);
+      doctors = cl ? [mapDoctor(cl)] : [];
+      bookings = all(`${BOOKING_SELECT} WHERE b.clinic_id=? AND b.date=? ORDER BY b.queue_number`, scopeClinicId, date).map(mapClinicBooking);
+    } else {
+      doctors = all(`SELECT * FROM clinics WHERE activated=1 ORDER BY name`).map(mapDoctor);
+      bookings = all(`${BOOKING_SELECT} WHERE b.date=? ORDER BY b.queue_number`, date).map(mapClinicBooking);
+    }
+    const settings = getSettings();
+    if (scopeClinicId) {
+      const cl = get(`SELECT * FROM clinics WHERE id=?`, scopeClinicId);
+      if (cl) { settings.name = cl.name; settings.tagline = cl.tagline || ''; }
+    }
     return json(res, 200, { settings, doctors, bookings });
   }
 
@@ -772,9 +787,11 @@ async function handle(req, res, pathname, query) {
   if (pathname === '/api/patients' && req.method === 'GET') {
     const date = query.get('date') ?? isoDate(0);
     const clinicId = query.get('clinicId');
+    const scopeId = getClinicId(req);
+    const finalClinicId = clinicId || scopeId;
     let sql = `${BOOKING_SELECT} WHERE b.date=? AND b.user_id NOT LIKE 'guest-%'`;
     const params = [date];
-    if (clinicId) { sql += ` AND b.clinic_id=?`; params.push(clinicId); }
+    if (finalClinicId) { sql += ` AND b.clinic_id=?`; params.push(finalClinicId); }
     sql += ` ORDER BY b.queue_number ASC`;
     return json(res, 200, all(sql, ...params).map(mapClinicBooking));
   }
