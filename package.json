@@ -1,0 +1,16 @@
+{
+  "name": "dawri-clinic-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "لوحة عيادة دوري — سيرفر الطوابير والحجوزات",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
