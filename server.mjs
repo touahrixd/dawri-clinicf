@@ -697,6 +697,12 @@ async function handle(req, res, pathname, query) {
   /* ── نظام ── */
   if (req.method === 'POST' && pathname === '/api/bootstrap') return json(res, 200, { ok: true });
   if (req.method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, db: DB_PATH });
+  if (req.method === 'GET' && pathname === '/api/debug') return json(res, 200, {
+    dist: STATIC_DIST,
+    distExists: existsSync(STATIC_DIST),
+    indexExists: existsSync(path.join(STATIC_DIST, 'index.html')),
+    cwd: __dirname,
+  });
 
   /* ── العيادات (مقدمو الخدمة المشتركون) ── */
   if (seg[1] === 'clinics') {
@@ -920,9 +926,8 @@ async function handle(req, res, pathname, query) {
   return json(res, 404, { error: `مسار غير معروف: ${req.method} ${pathname}` });
 }
 
-/* ── خدمة واجهة اللوحة المبنية (dist) من نفس السيرفر — للنشر بدون Node modules ── */
+/* ── خدمة واجهة اللوحة المبنية (dist) من نفس السيرفر ── */
 
-/* خدمة واجهة اللوحة: dist ملاصق للسيرفر (الاستضافة) أو مشروع clinic-app (التطوير) */
 const LOCAL_DIST = path.join(__dirname, 'dist');
 const STATIC_DIST =
   process.env.STATIC_DIR ??
@@ -947,18 +952,16 @@ function serveStatic(res, filePath) {
 }
 
 function handleStatic(req, res, pathname) {
-  if (req.method !== 'GET' || !existsSync(STATIC_DIST)) return false;
-  const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
-  const target = path.normalize(path.join(STATIC_DIST, rel));
-  if (target.startsWith(STATIC_DIST) && existsSync(target) && !target.includes('..')) {
-    serveStatic(res, target);
-    return true;
-  }
-  /* SPA fallback */
-  const index = path.join(STATIC_DIST, 'index.html');
-  if (existsSync(index)) {
-    serveStatic(res, index);
-    return true;
+  if (req.method !== 'GET') return false;
+  if (existsSync(STATIC_DIST)) {
+    const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+    const target = path.normalize(path.join(STATIC_DIST, rel));
+    if (target.startsWith(STATIC_DIST) && existsSync(target) && !target.includes('..')) {
+      serveStatic(res, target);
+      return true;
+    }
+    const fallback = path.join(STATIC_DIST, 'index.html');
+    if (existsSync(fallback)) { serveStatic(res, fallback); return true; }
   }
   return false;
 }
@@ -985,7 +988,13 @@ const server = createServer((req, res) => {
     console.error('[dawri-server]', msg);
     return json(res, 500, { error: 'خطأ داخلي في السيرفر.' });
   }).catch(() => { /* تجاهل */ }).then((served) => {
-    if (!served && !res.writableEnded) handleStatic(req, res, url.pathname);
+    if (!served && !res.writableEnded) {
+      const handled = handleStatic(req, res, url.pathname);
+      if (!handled && !res.writableEnded) {
+        res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<h1>404 — الملف غير موجود</h1><p>مجلد dist غير موجود على الخادم.</p>');
+      }
+    }
   });
 });
 

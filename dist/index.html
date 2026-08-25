@@ -1,20 +1,14 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>لوحة دوري — إدارة الأدوار للعيادة</title>
-    <meta
-      name="description"
-      content="نظام إدارة أدوار المرضى للعيادات: طابور مباشر، نداء صوتي عربي عند كل استدعاء، التحكم بالتسجيل الإلكتروني، وسجل الحضور والدفع."
-    />
+    <meta name="description" content="نظام إدارة أدوار المرضى للعيادات: طابور مباشر، نداء صوتي عربي عند كل استدعاء، التحكم بالتسجيل الإلكتروني، وسجل الحضور والدفع." />
     <meta name="theme-color" content="#0f766e" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="لوحة دوري — إدارة الأدوار للعيادة" />
-    <meta
-      property="og:description"
-      content="طابور مباشر • نداء صوتي عربي • تحكم بالتسجيل الإلكتروني • سجل الحضور والدفع"
-    />
+    <meta property="og:description" content="طابور مباشر • نداء صوتي عربي • تحكم بالتسجيل الإلكتروني • سجل الحضور والدفع" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -30,5 +24,109 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- زر الإعدادات العائم -->
+    <button id="settingsFab" onclick="openSettings()" title="إعدادات العيادة"
+      style="display:none;position:fixed;bottom:24px;left:24px;z-index:9999;width:56px;height:56px;border-radius:50%;
+      background:linear-gradient(135deg,#0f766e,#059669);color:#fff;font-size:24px;border:none;cursor:pointer;
+      box-shadow:0 4px 16px rgba(15,118,110,.4);transition:transform .2s"
+      onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+      ⚙️
+    </button>
+
+    <!-- نافذة الإعدادات -->
+    <div id="settingsModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.5);
+      display:none;align-items:center;justify-content:center;padding:20px">
+      <div style="background:#fff;border-radius:20px;padding:28px;width:min(420px,95vw);max-height:85vh;overflow-y:auto;
+        box-shadow:0 8px 32px rgba(0,0,0,.2);font-family:'Tajawal',system-ui,sans-serif">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <h2 style="font-size:20px;font-weight:700;color:#0f766e;margin:0">⚙️ إعدادات العيادة</h2>
+          <button onclick="closeSettings()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b">✕</button>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">اسم العيادة</label>
+          <input id="fsName" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="مثال: عيادة النخبة الطبية"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">الشعار</label>
+          <input id="fsTagline" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="مثال: صحتك أولوية"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">العنوان</label>
+          <input id="fsAddress" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="شارع، حي، مدينة"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رقم الهاتف</label>
+          <input id="fsPhone" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="032741234"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رسوم الكشفية (دج)</label>
+          <input id="fsFee" type="number" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="300"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رمز الممرضة</label>
+          <input id="fsPin" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="2222"/>
+        </div>
+
+        <button onclick="saveFabSettings()" style="width:100%;padding:12px;background:linear-gradient(135deg,#0f766e,#059669);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer">
+          💾 حفظ التغييرات
+        </button>
+        <div id="fabToast" style="text-align:center;margin-top:10px;font-size:14px;font-weight:600;min-height:24px;color:#059669"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const API = window.DAWRI_API_BASE || 'http://localhost:4600/api';
+
+      /* إظهار زر الإعدادات بعد تحميل الواجهة */
+      setTimeout(() => {
+        document.getElementById('settingsFab').style.display = 'flex';
+      }, 3000);
+
+      /* فتح/إغلاق النافذة */
+      window.openSettings = function () {
+        const modal = document.getElementById('settingsModal');
+        modal.style.display = 'flex';
+        fetch(API + '/settings').then(r => r.json()).then(s => {
+          document.getElementById('fsName').value = s.name || '';
+          document.getElementById('fsTagline').value = s.tagline || '';
+          document.getElementById('fsAddress').value = s.address || '';
+          document.getElementById('fsPhone').value = s.phone || '';
+          document.getElementById('fsFee').value = s.fee || '';
+          document.getElementById('fsPin').value = s.secretaryPin || '';
+        });
+      };
+
+      window.closeSettings = function () {
+        document.getElementById('settingsModal').style.display = 'none';
+      };
+
+      window.saveFabSettings = function () {
+        const body = {
+          name: document.getElementById('fsName').value.trim(),
+          tagline: document.getElementById('fsTagline').value.trim(),
+          address: document.getElementById('fsAddress').value.trim(),
+          phone: document.getElementById('fsPhone').value.trim(),
+          fee: Number(document.getElementById('fsFee').value) || 300,
+          secretaryPin: document.getElementById('fsPin').value.trim(),
+        };
+        fetch(API + '/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }).then(r => r.json()).then(() => {
+          document.getElementById('fabToast').textContent = '✅ تم الحفظ';
+          setTimeout(() => { document.getElementById('fabToast').textContent = ''; }, 3000);
+        }).catch(() => {
+          document.getElementById('fabToast').textContent = '❌ خطأ في الحفظ';
+        });
+      };
+
+      /* إغلاق النافذة عند الضغط خارجها */
+      document.getElementById('settingsModal').addEventListener('click', function(e) {
+        if (e.target === this) closeSettings();
+      });
+    </script>
   </body>
 </html>
