@@ -1,135 +1,514 @@
-﻿<!doctype html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>لوحة دوري — إدارة الأدوار للعيادة</title>
-    <meta name="description" content="نظام إدارة أدوار المرضى للعيادات: طابور مباشر، نداء صوتي عربي عند كل استدعاء، التحكم بالتسجيل الإلكتروني، وسجل الحضور والدفع." />
-    <meta name="theme-color" content="#0f766e" />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="لوحة دوري — إدارة الأدوار للعيادة" />
-    <meta property="og:description" content="طابور مباشر • نداء صوتي عربي • تحكم بالتسجيل الإلكتروني • سجل الحضور والدفع" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <script type="module" crossorigin src="/assets/index-egIjzhA5.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CyGRkLFq.css">
-  </head>
-  <body>
-    <div id="root"></div>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>لوحة دوري — إدارة الأدوار</title>
+<meta name="theme-color" content="#0f766e"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet"/>
+<link rel="icon" type="image/svg+xml" href="/icon.svg"/>
+<link rel="manifest" href="/manifest.webmanifest"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--teal:#0f766e;--emerald:#059669;--bg:#f0fdf4;--card:#fff;--text:#1e293b;--muted:#64748b;--border:#e2e8f0;--danger:#ef4444;--amber:#f59e0b;--shadow:0 1px 3px rgba(0,0,0,.1)}
+body{font-family:'Tajawal',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:12px;padding:12px 24px;font-size:16px;font-weight:600;transition:all .15s}
+input,select{font-family:inherit;border:2px solid var(--border);border-radius:12px;padding:10px 14px;font-size:15px;width:100%;outline:none;transition:border .15s}
+input:focus{border-color:var(--teal)}
+.hidden{display:none!important}
 
-    <!-- زر الإعدادات العائم -->
-    <button id="settingsFab" onclick="openSettings()" title="إعدادات العيادة"
-      style="display:none;position:fixed;bottom:24px;left:24px;z-index:9999;width:56px;height:56px;border-radius:50%;
-      background:linear-gradient(135deg,#0f766e,#059669);color:#fff;font-size:24px;border:none;cursor:pointer;
-      box-shadow:0 4px 16px rgba(15,118,110,.4);transition:transform .2s"
-      onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
-      ⚙️
-    </button>
+/* ── الصفحة الرئيسية ── */
+.landing{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100dvh;background:linear-gradient(135deg,var(--teal),var(--emerald));padding:20px}
+.landing-card{background:#fff;border-radius:24px;padding:40px 32px;width:min(420px,95vw);text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.landing-card h1{font-size:32px;font-weight:800;color:var(--teal);margin-bottom:8px}
+.landing-card p{color:var(--muted);margin-bottom:28px}
+.landing-btns{display:flex;flex-direction:column;gap:12px}
+.landing-btn{padding:16px;font-size:17px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:10px}
+.btn-admin{background:var(--teal);color:#fff}
+.btn-admin:hover{background:var(--emerald)}
+.btn-clinic{background:#f1f5f9;color:var(--text);border:2px solid var(--border)}
+.btn-clinic:hover{border-color:var(--teal)}
+.btn-activate{background:#fff7ed;color:#c2410c;border:2px solid #fed7aa}
+.btn-activate:hover{border-color:#f97316}
+.landing-card .error{color:var(--danger);font-size:14px;margin-top:8px;min-height:20px}
 
-    <!-- نافذة الإعدادات -->
-    <div id="settingsModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.5);
-      display:none;align-items:center;justify-content:center;padding:20px">
-      <div style="background:#fff;border-radius:20px;padding:28px;width:min(420px,95vw);max-height:85vh;overflow-y:auto;
-        box-shadow:0 8px 32px rgba(0,0,0,.2);font-family:'Tajawal',system-ui,sans-serif">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h2 style="font-size:20px;font-weight:700;color:#0f766e;margin:0">⚙️ إعدادات العيادة</h2>
-          <button onclick="closeSettings()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#64748b">✕</button>
-        </div>
+/* ── نموذج الدخول ── */
+.login-form{padding:40px 32px;width:min(420px,95vw);background:#fff;border-radius:24px;box-shadow:0 8px 32px rgba(0,0,0,.15);text-align:center}
+.login-form h2{font-size:22px;font-weight:700;color:var(--teal);margin-bottom:20px}
+.login-form .field{margin-bottom:14px;text-align:right}
+.login-form .field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.login-form .btn{width:100%;margin-top:8px}
+.btn-teal{background:var(--teal);color:#fff}
+.btn-teal:hover{background:var(--emerald)}
+.btn-back{background:none;color:var(--muted);font-size:14px;padding:8px;margin-top:12px}
 
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">اسم العيادة</label>
-          <input id="fsName" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="مثال: عيادة النخبة الطبية"/>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">الشعار</label>
-          <input id="fsTagline" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="مثال: صحتك أولوية"/>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">العنوان</label>
-          <input id="fsAddress" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="شارع، حي، مدينة"/>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رقم الهاتف</label>
-          <input id="fsPhone" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="032741234"/>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رسوم الكشفية (دج)</label>
-          <input id="fsFee" type="number" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="300"/>
-        </div>
-        <div style="margin-bottom:14px">
-          <label style="display:block;font-size:13px;font-weight:600;color:#64748b;margin-bottom:4px">رمز الممرضة</label>
-          <input id="fsPin" style="width:100%;padding:10px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:15px;font-family:inherit;outline:none" placeholder="2222"/>
-        </div>
+/* ── لوحة الأدمين ── */
+.admin-bar{background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.admin-bar h1{font-size:18px;font-weight:700}
+.admin-bar button{background:rgba(255,255,255,.15);color:#fff;font-size:13px;padding:8px 16px}
+.admin-content{padding:16px;max-width:900px;margin:0 auto}
+.clinic-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.clinic-card .top{display:flex;justify-content:space-between;align-items:start}
+.clinic-card .name{font-size:17px;font-weight:700}
+.clinic-card .spec{color:var(--muted);font-size:13px}
+.clinic-card .code{background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:8px;font-size:13px;font-weight:700;margin-top:6px;display:inline-block;letter-spacing:1px}
+.clinic-card .status{font-size:12px;margin-top:4px}
+.clinic-card .status.activated{color:var(--emerald)}
+.clinic-card .status.pending{color:var(--amber)}
+.clinic-card .del-btn{background:#fef2f2;color:var(--danger);padding:6px 14px;font-size:13px;border-radius:8px}
+.clinic-card .del-btn:hover{background:#fee2e2}
+.add-form{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.add-form h3{font-size:16px;font-weight:700;color:var(--teal);margin-bottom:12px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-full{grid-column:1/-1}
 
-        <button onclick="saveFabSettings()" style="width:100%;padding:12px;background:linear-gradient(135deg,#0f766e,#059669);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer">
-          💾 حفظ التغييرات
-        </button>
-        <div id="fabToast" style="text-align:center;margin-top:10px;font-size:14px;font-weight:600;min-height:24px;color:#059669"></div>
+/* ── لوحة العيادة ── */
+.clinic-bar{background:linear-gradient(135deg,var(--teal),var(--emerald));color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.clinic-bar .info h1{font-size:18px;font-weight:700}
+.clinic-bar .info .tagline{font-size:13px;opacity:.9}
+.clinic-bar button{background:rgba(255,255,255,.2);color:#fff;font-size:13px;padding:8px 16px}
+.stats-row{display:flex;gap:12px;padding:16px 16px 0}
+.stat-card{flex:1;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;box-shadow:var(--shadow)}
+.stat-card .num{font-size:26px;font-weight:800;color:var(--teal)}
+.stat-card .label{font-size:11px;color:var(--muted);margin-top:2px}
+.queue-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
+.queue-header h2{font-size:17px;font-weight:700}
+.btn-call{background:var(--teal);color:#fff;display:flex;align-items:center;gap:8px;font-size:14px;padding:10px 18px}
+.btn-call:hover{background:var(--emerald)}
+.btn-call:disabled{opacity:.5;cursor:not-allowed}
+.btn-pause{display:flex;align-items:center;gap:6px;font-size:14px;padding:10px 18px;border-radius:12px}
+.btn-pause.active{background:#fef3c7;color:#92400e;border:2px solid #f59e0b}
+.btn-pause.inactive{background:#ecfdf5;color:#065f46;border:2px solid #10b981}
+.queue-list{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
+.queue-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+.queue-item.current{border-color:var(--teal);background:#f0fdfa}
+.queue-item.done{opacity:.5}
+.queue-num{font-size:22px;font-weight:800;color:var(--teal);min-width:36px;text-align:center}
+.queue-item.current .queue-num{color:#fff;background:var(--teal);width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px}
+.queue-info{flex:1}
+.queue-info .pname{font-weight:700;font-size:15px}
+.queue-info .pphone{color:var(--muted);font-size:12px}
+.queue-info .pstatus{font-size:11px;margin-top:2px}
+.status-w{color:var(--amber)}
+.status-c{color:var(--teal);font-weight:600}
+.status-d{color:var(--emerald)}
+.btn-done{background:#dcfce7;color:#166534;padding:6px 14px;font-size:12px;border-radius:8px}
+.btn-done:hover{background:#bbf7d0}
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#166534;color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:600;z-index:999;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.add-walkin{padding:0 16px 16px}
+.add-walkin-form{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:8px;align-items:end}
+.add-walkin-form input{flex:1}
+.add-walkin-form button{white-space:nowrap;padding:10px 16px}
+</style>
+</head>
+<body>
+
+<!-- ═══ الصفحة الرئيسية ═══ -->
+<div id="page-landing" class="landing">
+  <div class="landing-card">
+    <h1>🏥 دوري</h1>
+    <p>نظام إدارة أدوار المرضى</p>
+    <div class="landing-btns">
+      <button class="landing-btn btn-admin" onclick="showPage('page-admin-login')">👤 دخول الأدمين</button>
+      <button class="landing-btn btn-clinic" onclick="showPage('page-clinic-login')">🏥 دخول العيادة</button>
+      <button class="landing-btn btn-activate" onclick="showPage('page-activate')">🔑 تفعيل اشتراك جديد</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ دخول الأدمين ═══ -->
+<div id="page-admin-login" class="landing hidden">
+  <div class="login-form">
+    <h2>👤 دخول الأدمين</h2>
+    <div class="field"><label>رمز الأدمين</label><input id="adminPin" type="password" inputmode="numeric" placeholder="أدخل الرمز"/></div>
+    <button class="btn btn-teal" onclick="adminLogin()">دخول</button>
+    <div class="error" id="adminErr"></div>
+    <button class="btn-back" onclick="showPage('page-landing')">← رجوع</button>
+  </div>
+</div>
+
+<!-- ═══ لوحة الأدمين ═══ -->
+<div id="page-admin" class="hidden">
+  <div class="admin-bar">
+    <h1>⚙️ إدارة العيادات</h1>
+    <button onclick="doLogout()">خروج</button>
+  </div>
+  <div class="admin-content">
+    <div class="add-form" id="addClinicForm">
+      <h3>➕ إضافة عيادة جديدة</h3>
+      <div class="form-row">
+        <div class="field"><label>اسم العيادة *</label><input id="ac-name" placeholder="عيادة الشفاء"/></div>
+        <div class="field"><label>التخصص *</label><input id="ac-specialty" placeholder="طب عام"/></div>
+        <div class="field"><label>المدينة</label><input id="ac-city" placeholder="الجزائر"/></div>
+        <div class="field"><label>الهاتف</label><input id="ac-phone" placeholder="0555123400"/></div>
+        <div class="field form-full"><label>العنوان</label><input id="ac-address" placeholder="شارع..."/></div>
+        <div class="field"><label>الرسوم (دج)</label><input id="ac-fee" type="number" value="200"/></div>
+        <div class="field"><label>العمولة (%)</label><input id="ac-commission" type="number" value="50"/></div>
+      </div>
+      <button class="btn btn-teal" onclick="addClinic()" style="margin-top:12px;width:100%">➕ إضافة و(probably get activation code)</button>
+      <div id="newCodeResult" style="margin-top:12px;text-align:center;font-size:15px;min-height:24px"></div>
+    </div>
+    <h3 style="margin-bottom:12px;font-size:16px">📋 جميع العيادات</h3>
+    <div id="adminClinicsList"></div>
+  </div>
+</div>
+
+<!-- ═══ دخول العيادة ═══ -->
+<div id="page-clinic-login" class="landing hidden">
+  <div class="login-form">
+    <h2>🏥 دخول العيادة</h2>
+    <div class="field"><label>معرّف العيادة</label><input id="cl-id" placeholder="cl-xxxxxxx"/></div>
+    <div class="field"><label>كلمة المرور</label><input id="cl-pass" type="password" placeholder="كلمة المرور"/></div>
+    <button class="btn btn-teal" onclick="clinicLogin()">دخول</button>
+    <div class="error" id="clErr"></div>
+    <button class="btn-back" onclick="showPage('page-landing')">← رجوع</button>
+  </div>
+</div>
+
+<!-- ═══ تفعيل الاشتراك ═══ -->
+<div id="page-activate" class="landing hidden">
+  <div class="login-form">
+    <h2>🔑 تفعيل الاشتراك</h2>
+    <div class="field"><label>كود التفعيل</label><input id="act-code" placeholder="A1B2C3-D4E5F6" style="letter-spacing:2px"/></div>
+    <div class="field"><label>اسم العيادة</label><input id="act-name" placeholder="عيادة الشفاء الطبية"/></div>
+    <div class="field"><label>الشعار (اختياري)</label><input id="act-tagline" placeholder="صحتك أولوية"/></div>
+    <div class="field"><label>المدينة</label><input id="act-city" placeholder="الجزائر"/></div>
+    <div class="field"><label>العنوان</label><input id="act-address" placeholder="شارع..."/></div>
+    <div class="field"><label>الهاتف</label><input id="act-phone" placeholder="0555123400"/></div>
+    <div class="field"><label>كلمة المرور (4+ حروف)</label><input id="act-pass" type="password" placeholder="اختر كلمة مرور"/></div>
+    <div class="field"><label>تأكيد كلمة المرور</label><input id="act-pass2" type="password" placeholder="أعد إدخال كلمة المرور"/></div>
+    <button class="btn btn-teal" onclick="activateClinic()" style="width:100%">✅ تفعيل</button>
+    <div class="error" id="actErr"></div>
+    <button class="btn-back" onclick="showPage('page-landing')">← رجوع</button>
+  </div>
+</div>
+
+<!-- ═══ لوحة العيادة ═══ -->
+<div id="page-clinic-dash" class="hidden">
+  <div class="clinic-bar">
+    <div class="info">
+      <h1 id="cdName">عيادة</h1>
+      <div class="tagline" id="cdTagline"></div>
+    </div>
+    <button onclick="doLogout()">خروج</button>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="num" id="cdWaiting">0</div><div class="label">في الانتظار</div></div>
+    <div class="stat-card"><div class="num" id="cdCurrent">-</div><div class="label">الدور الحالي</div></div>
+    <div class="stat-card"><div class="num" id="cdDone">0</div><div class="label">تمت الخدمة</div></div>
+  </div>
+
+  <div class="queue-header">
+    <h2>طابور اليوم</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn-pause" id="btnPause" onclick="togglePause()">⏸️ إيقاف</button>
+      <button class="btn-call" id="btnCallNext" onclick="callNext()">📞 استدعاء</button>
+    </div>
+  </div>
+
+  <div class="add-walkin">
+    <div class="add-walkin-form">
+      <input id="wkName" placeholder="اسم المريض"/>
+      <input id="wkPhone" placeholder="رقم الهاتف" type="tel"/>
+      <button class="btn btn-teal" onclick="addWalkin()">+ إضافة</button>
+    </div>
+  </div>
+
+  <div class="queue-list" id="cdQueue">
+    <div class="empty-state">لا يوجد مرضى في الطابور</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = location.origin + '/api';
+
+function showPage(id) {
+  document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function doLogout() {
+  sessionStorage.clear();
+  showPage('page-landing');
+}
+
+/* ═══ أدمين ═══ */
+let adminToken = '';
+async function adminLogin() {
+  const pin = document.getElementById('adminPin').value.trim();
+  try {
+    const r = await fetch(API + '/admin/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const d = await r.json();
+    if (!r.ok) { document.getElementById('adminErr').textContent = d.error; return; }
+    adminToken = d.token;
+    sessionStorage.setItem('adminToken', adminToken);
+    showPage('page-admin');
+    loadAdminClinics();
+  } catch { document.getElementById('adminErr').textContent = 'خطأ في الاتصال'; }
+}
+
+async function loadAdminClinics() {
+  const r = await fetch(API + '/admin/clinics', { headers: { 'Authorization': 'Bearer ' + adminToken } });
+  const clinics = await r.json();
+  const el = document.getElementById('adminClinicsList');
+  if (!clinics.length) { el.innerHTML = '<div class="empty-state">لا توجد عيادات بعد</div>'; return; }
+  el.innerHTML = clinics.map(c => `
+    <div class="clinic-card">
+      <div class="top">
+        <div>
+          <div class="name">${c.name || '(بدون اسم)'}</div>
+          <div class="spec">${c.specialty} — ${c.city || ''}</div>
+          <div class="code">🔑 ${c.activated ? '(تم التفعيل)' : c.id}</div>
+          ${!c.activated ? `<div class="code">كود التفعيل: ${c.activationCode || '—'}</div>` : ''}
+          <div class="status ${c.activated ? 'activated' : 'pending'}">${c.activated ? '✅ مفعّلة' : '⏳ في انتظار التفعيل'}</div>
+        </div>
+        <button class="del-btn" onclick="deleteClinic('${c.id}','${c.name}')">🗑️ حذف</button>
       </div>
     </div>
+  `).join('');
+}
 
-    <script type="module">
-      const API = window.DAWRI_API_BASE || (location.origin + '/api');
-      const fab = document.getElementById('settingsFab');
+async function addClinic() {
+  const body = {
+    name: document.getElementById('ac-name').value.trim(),
+    specialty: document.getElementById('ac-specialty').value.trim(),
+    city: document.getElementById('ac-city').value.trim(),
+    phone: document.getElementById('ac-phone').value.trim(),
+    address: document.getElementById('ac-address').value.trim(),
+    fee: Number(document.getElementById('ac-fee').value) || 200,
+    commission: Number(document.getElementById('ac-commission').value) || 50,
+  };
+  const r = await fetch(API + '/admin/clinics', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!r.ok) { toast('❌ ' + d.error); return; }
+  document.getElementById('newCodeResult').innerHTML =
+    `✅ تمت الإضافة — معرّف العيادة: <strong>${d.id}</strong><br>كود التفعيل: <strong style="font-size:18px;color:#c2410c">${d.activationCode}</strong>`;
+  toast('✅ تمت الإضافة');
+  ['ac-name','ac-specialty','ac-city','ac-phone','ac-address'].forEach(id => document.getElementById(id).value = '');
+  loadAdminClinics();
+}
 
-      /* إظهار زر الإعدادات فقط بعد الدخول للوحة */
-      const obs = new MutationObserver(() => {
-        const logged = sessionStorage.getItem('dawri.session') === 'nurse' || sessionStorage.getItem('dawri.session') === 'admin';
-        fab.style.display = logged ? 'flex' : 'none';
-      });
-      obs.observe(document.getElementById('root'), { childList: true, subtree: true });
+async function deleteClinic(id, name) {
+  if (!confirm(`هل تريد حذف عيادة "${name}"?`)) return;
+  const r = await fetch(API + '/admin/clinics/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+    body: JSON.stringify({ id }),
+  });
+  if (r.ok) { toast('✅ تم الحذف'); loadAdminClinics(); }
+}
 
-      /* فتح/إغلاق النافذة */
-      window.openSettings = function () {
-        const modal = document.getElementById('settingsModal');
-        modal.style.display = 'flex';
-        fetch(API + '/settings').then(r => r.json()).then(s => {
-          document.getElementById('fsName').value = s.name || '';
-          document.getElementById('fsTagline').value = s.tagline || '';
-          document.getElementById('fsAddress').value = s.address || '';
-          document.getElementById('fsPhone').value = s.phone || '';
-          document.getElementById('fsFee').value = s.fee || '';
-          document.getElementById('fsPin').value = s.secretaryPin || '';
-        });
-      };
+/* ═══ تفعيل ═══ */
+async function activateClinic() {
+  const code = document.getElementById('act-code').value.trim();
+  const name = document.getElementById('act-name').value.trim();
+  const pass = document.getElementById('act-pass').value;
+  const pass2 = document.getElementById('act-pass2').value;
+  const errEl = document.getElementById('actErr');
 
-      window.closeSettings = function () {
-        document.getElementById('settingsModal').style.display = 'none';
-      };
+  if (!code) { errEl.textContent = 'كود التفعيل مطلوب'; return; }
+  if (!name) { errEl.textContent = 'اسم العيادة مطلوب'; return; }
+  if (pass.length < 4) { errEl.textContent = 'كلمة المرور 4+ حروف'; return; }
+  if (pass !== pass2) { errEl.textContent = 'كلمتا المرور غير متطابقتين'; return; }
 
-      window.saveFabSettings = function () {
-        const body = {
-          name: document.getElementById('fsName').value.trim(),
-          tagline: document.getElementById('fsTagline').value.trim(),
-          address: document.getElementById('fsAddress').value.trim(),
-          phone: document.getElementById('fsPhone').value.trim(),
-          fee: Number(document.getElementById('fsFee').value) || 300,
-          secretaryPin: document.getElementById('fsPin').value.trim(),
-        };
-        fetch(API + '/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }).then(r => r.json()).then(() => {
-          document.getElementById('fabToast').textContent = '✅ تم الحفظ';
-          setTimeout(() => { document.getElementById('fabToast').textContent = ''; }, 3000);
-        }).catch(() => {
-          document.getElementById('fabToast').textContent = '❌ خطأ في الحفظ';
-        });
-      };
+  const r = await fetch(API + '/clinic/activate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      activationCode: code, password: pass, clinicName: name,
+      tagline: document.getElementById('act-tagline').value.trim(),
+      address: document.getElementById('act-address').value.trim(),
+      phone: document.getElementById('act-phone').value.trim(),
+    }),
+  });
+  const d = await r.json();
+  if (!r.ok) { errEl.textContent = d.error; return; }
 
-      /* إغلاق النافذة عند الضغط خارجها */
-      document.getElementById('settingsModal').addEventListener('click', function(e) {
-        if (e.target === this) closeSettings();
-      });
-    </script>
-  </body>
+  sessionStorage.setItem('clinicToken', d.token);
+  sessionStorage.setItem('clinicId', d.clinicId);
+  toast('✅ تم التفعيل!');
+  enterClinicDash(d.token, d.clinicId);
+}
+
+/* ═══ دخول العيادة ═══ */
+async function clinicLogin() {
+  const clinicId = document.getElementById('cl-id').value.trim();
+  const password = document.getElementById('cl-pass').value;
+  const errEl = document.getElementById('clErr');
+  try {
+    const r = await fetch(API + '/clinic/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clinicId, password }),
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error; return; }
+    sessionStorage.setItem('clinicToken', d.token);
+    sessionStorage.setItem('clinicId', clinicId);
+    enterClinicDash(d.token, clinicId);
+  } catch { errEl.textContent = 'خطأ في الاتصال'; }
+}
+
+/* ═══ لوحة العيادة ═══ */
+let clinicToken = '';
+let clinicId = '';
+let isPaused = false;
+let refreshInterval = null;
+
+async function enterClinicDash(token, id) {
+  clinicToken = token;
+  clinicId = id;
+  showPage('page-clinic-dash');
+  await loadClinicDash();
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(loadClinicDash, 8000);
+}
+
+async function loadClinicDash() {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const r = await fetch(API + '/clinic/dashboard?date=' + today, {
+      headers: { 'Authorization': 'Bearer ' + clinicToken },
+    });
+    if (r.status === 401) { doLogout(); return; }
+    const d = await r.json();
+    if (d.clinic) {
+      document.getElementById('cdName').textContent = d.clinic.name || 'عيادة';
+      document.getElementById('cdTagline').textContent = d.clinic.tagline || '';
+      isPaused = d.clinic.isPaused;
+      updatePauseBtn();
+    }
+    renderClinicQueue(d.bookings || []);
+  } catch {}
+}
+
+function updatePauseBtn() {
+  const btn = document.getElementById('btnPause');
+  btn.className = 'btn-pause ' + (isPaused ? 'active' : 'inactive');
+  btn.innerHTML = isPaused ? '▶️ استئناف' : '⏸️ إيقاف';
+}
+
+function renderClinicQueue(bookings) {
+  const waiting = bookings.filter(b => b.status === 'WAITING');
+  const current = bookings.find(b => b.status === 'CURRENT');
+  const done = bookings.filter(b => b.status === 'COMPLETED');
+
+  document.getElementById('cdWaiting').textContent = waiting.length;
+  document.getElementById('cdCurrent').textContent = current ? current.queueNumber : '-';
+  document.getElementById('cdDone').textContent = done.length;
+
+  const el = document.getElementById('cdQueue');
+  if (!bookings.length) { el.innerHTML = '<div class="empty-state">لا يوجد مرضى في الطابور</div>'; return; }
+
+  let html = '';
+  if (current) html += qItem(current, 'current');
+  for (const b of waiting) html += qItem(b, 'waiting');
+  for (const b of done.slice(-5).reverse()) html += qItem(b, 'done');
+  el.innerHTML = html;
+}
+
+function qItem(b, type) {
+  const cls = type === 'current' ? 'current' : type === 'done' ? 'done' : '';
+  const sCls = type === 'current' ? 'status-c' : type === 'done' ? 'status-d' : 'status-w';
+  const sTxt = type === 'current' ? '⏳ جاري الفحص' : type === 'done' ? '✅ تم' : 'في الانتظار';
+  const act = type === 'waiting'
+    ? `<button class="btn-done" onclick="completeBooking('${b.id}')">✅ تم</button>` : '';
+  return `<div class="queue-item ${cls}">
+    <div class="queue-num">${b.queueNumber}</div>
+    <div class="queue-info">
+      <div class="pname">${b.patientName || 'مجهول'}</div>
+      <div class="pphone">${b.patientPhone || ''}</div>
+      <div class="pstatus ${sCls}">${sTxt}</div>
+    </div>${act}</div>`;
+}
+
+async function callNext() {
+  const btn = document.getElementById('btnCallNext');
+  btn.disabled = true;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const r = await fetch(API + '/clinic/call-next', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + clinicToken },
+      body: JSON.stringify({ date: today }),
+    });
+    const d = await r.json();
+    if (d && d.queueNumber) {
+      toast(`📞 الدور رقم ${d.queueNumber} — ${d.patientName || ''}`);
+      fetch(API + '/tts?text=' + encodeURIComponent('الدور رقم ' + d.queueNumber + '. ' + (d.patientName || '')));
+    } else {
+      toast('لا يوجد مرضى في الانتظار');
+    }
+  } catch { toast('خطأ'); }
+  await loadClinicDash();
+  btn.disabled = false;
+}
+
+async function togglePause() {
+  isPaused = !isPaused;
+  updatePauseBtn();
+  await fetch(API + '/clinic/pause', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + clinicToken },
+    body: JSON.stringify({ paused: isPaused }),
+  });
+  toast(isPaused ? '⏸️ تم الإيقاف' : '▶️ تم الاستئناف');
+}
+
+async function completeBooking(id) {
+  await fetch(API + '/clinic/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + clinicToken },
+    body: JSON.stringify({ bookingId: id }),
+  });
+  toast('✅ تم');
+  loadClinicDash();
+}
+
+async function addWalkin() {
+  const name = document.getElementById('wkName').value.trim();
+  const phone = document.getElementById('wkPhone').value.trim();
+  if (!name) { toast('أدخل اسم المريض'); return; }
+  if (!phone) { toast('أدخل رقم الهاتف'); return; }
+  await fetch(API + '/clinic/add-walkin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + clinicToken },
+    body: JSON.stringify({ patientName: name, patientPhone: phone }),
+  });
+  document.getElementById('wkName').value = '';
+  document.getElementById('wkPhone').value = '';
+  toast('✅ تمت الإضافة');
+  loadClinicDash();
+}
+
+/* ── إعادة الدخول التلقائي ── */
+window.addEventListener('DOMContentLoaded', () => {
+  const at = sessionStorage.getItem('adminToken');
+  const ct = sessionStorage.getItem('clinicToken');
+  const ci = sessionStorage.getItem('clinicId');
+  if (ct && ci) enterClinicDash(ct, ci);
+  else if (at) { adminToken = at; showPage('page-admin'); loadAdminClinics(); }
+});
+
+document.getElementById('adminPin')?.addEventListener('keydown', e => { if (e.key === 'Enter') adminLogin(); });
+document.getElementById('cl-pass')?.addEventListener('keydown', e => { if (e.key === 'Enter') clinicLogin(); });
+document.getElementById('act-pass2')?.addEventListener('keydown', e => { if (e.key === 'Enter') activateClinic(); });
+</script>
+</body>
 </html>

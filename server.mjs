@@ -1,11 +1,3 @@
-/* ============================================================================
-   dawri-server — السيرفر المشترك لتطبيقَي «دوري»
-   ---------------------------------------------------------------------------
-   • صفر تبعيات خارجية: node:http + node:sqlite المدمج في Node 26
-   • قاعدة بيانات SQLite حقيقية على القرص: dawri-server/dawri.db
-   • تطبيق المريض (:5180) ولوحة العيادة (:5181) يتصلان هنا عبر REST API
-   ========================================================================== */
-
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -25,52 +17,50 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
 
-  CREATE TABLE IF NOT EXISTS users (
-    uid        TEXT PRIMARY KEY,
-    name       TEXT NOT NULL DEFAULT '',
-    email      TEXT NOT NULL DEFAULT '',
-    phone      TEXT,
-    provider   TEXT NOT NULL,
-    photo_url  TEXT,
-    address    TEXT NOT NULL DEFAULT '',
-    whatsapp   TEXT NOT NULL DEFAULT '',
-    lat        REAL,
-    lng        REAL,
-    created_at TEXT NOT NULL
-  );
-
   CREATE TABLE IF NOT EXISTS clinics (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    specialty   TEXT NOT NULL,
-    city        TEXT NOT NULL DEFAULT '',
-    address     TEXT NOT NULL DEFAULT '',
-    phone       TEXT NOT NULL DEFAULT '',
-    rating      REAL NOT NULL DEFAULT 4,
-    reviews     INTEGER NOT NULL DEFAULT 0,
-    fee         INTEGER NOT NULL DEFAULT 200,
-    avg_minutes INTEGER NOT NULL DEFAULT 15,
-    certified   INTEGER NOT NULL DEFAULT 1,
-    contracted  INTEGER NOT NULL DEFAULT 0,
-    open_time   TEXT NOT NULL DEFAULT '20:00',
-    always_open INTEGER NOT NULL DEFAULT 0,
-    color       TEXT NOT NULL DEFAULT ''
+    id             TEXT PRIMARY KEY,
+    name           TEXT NOT NULL DEFAULT '',
+    specialty      TEXT NOT NULL DEFAULT '',
+    city           TEXT NOT NULL DEFAULT '',
+    address        TEXT NOT NULL DEFAULT '',
+    phone          TEXT NOT NULL DEFAULT '',
+    rating         REAL NOT NULL DEFAULT 4,
+    reviews        INTEGER NOT NULL DEFAULT 0,
+    fee            INTEGER NOT NULL DEFAULT 200,
+    avg_minutes    INTEGER NOT NULL DEFAULT 15,
+    certified      INTEGER NOT NULL DEFAULT 1,
+    contracted     INTEGER NOT NULL DEFAULT 0,
+    open_time      TEXT NOT NULL DEFAULT '08:00',
+    always_open    INTEGER NOT NULL DEFAULT 0,
+    color          TEXT NOT NULL DEFAULT '',
+    is_open        INTEGER NOT NULL DEFAULT 1,
+    commission     INTEGER NOT NULL DEFAULT 50,
+    online_enabled INTEGER NOT NULL DEFAULT 1,
+    max_online     INTEGER NOT NULL DEFAULT 30,
+    activation_code TEXT,
+    activated      INTEGER NOT NULL DEFAULT 0,
+    password_hash  TEXT,
+    password_salt  TEXT,
+    is_paused      INTEGER NOT NULL DEFAULT 0,
+    tagline        TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS bookings (
-    id           TEXT PRIMARY KEY,
-    clinic_id    TEXT NOT NULL,
-    user_id      TEXT NOT NULL,
-    patient_name TEXT NOT NULL,
-    whatsapp     TEXT NOT NULL DEFAULT '',
-    disability   INTEGER NOT NULL DEFAULT 0,
-    date         TEXT NOT NULL,
-    queue_number INTEGER NOT NULL,
-    status       TEXT NOT NULL DEFAULT 'WAITING',
-    fee          INTEGER NOT NULL DEFAULT 0,
-    called_at    TEXT,
-    finished_at  TEXT,
-    created_at   TEXT NOT NULL
+    id             TEXT PRIMARY KEY,
+    clinic_id      TEXT NOT NULL,
+    user_id        TEXT NOT NULL,
+    patient_name   TEXT NOT NULL,
+    whatsapp       TEXT NOT NULL DEFAULT '',
+    disability     INTEGER NOT NULL DEFAULT 0,
+    date           TEXT NOT NULL,
+    queue_number   INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'WAITING',
+    fee            INTEGER NOT NULL DEFAULT 0,
+    called_at      TEXT,
+    finished_at    TEXT,
+    payment_status TEXT NOT NULL DEFAULT 'UNPAID',
+    created_at     TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_bookings_user  ON bookings(user_id);
   CREATE INDEX IF NOT EXISTS idx_bookings_queue ON bookings(clinic_id, date);
@@ -95,20 +85,16 @@ db.exec(`
 `);
 
 for (const stmt of [
-  `ALTER TABLE clinics ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1`,
-  `ALTER TABLE clinics ADD COLUMN commission INTEGER NOT NULL DEFAULT 50`,
-  `ALTER TABLE clinics ADD COLUMN online_enabled INTEGER NOT NULL DEFAULT 1`,
-  `ALTER TABLE clinics ADD COLUMN max_online INTEGER NOT NULL DEFAULT 30`,
-  `ALTER TABLE bookings ADD COLUMN payment_status TEXT NOT NULL DEFAULT 'UNPAID'`,
+  `ALTER TABLE clinics ADD COLUMN activation_code TEXT`,
+  `ALTER TABLE clinics ADD COLUMN activated INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE clinics ADD COLUMN password_hash TEXT`,
+  `ALTER TABLE clinics ADD COLUMN password_salt TEXT`,
+  `ALTER TABLE clinics ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE clinics ADD COLUMN tagline TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE clinics ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`,
 ]) {
-  try {
-    db.prepare(stmt).run();
-  } catch {
-    /* العمود موجود مسبقًا */
-  }
+  try { db.prepare(stmt).run(); } catch { /* موجود مسبقًا */ }
 }
-
-/* ─────────── أدوات مساعدة ─────────── */
 
 const get = (sql, ...params) => db.prepare(sql).get(...params);
 const all = (sql, ...params) => db.prepare(sql).all(...params);
@@ -117,129 +103,70 @@ const run = (sql, ...params) => { db.prepare(sql).run(...params); };
 class DomainError extends Error {}
 const fail = (message) => { throw new DomainError(message); };
 
-/** معاملة ذرّية */
 function tx(fn) {
   db.exec('BEGIN IMMEDIATE');
-  try {
-    const result = fn();
-    db.exec('COMMIT');
-    return result;
-  } catch (err) {
-    try { db.exec('ROLLBACK'); } catch { /* لا معاملة مفتوحة */ }
-    throw err;
-  }
+  try { const r = fn(); db.exec('COMMIT'); return r; }
+  catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
 }
 
 const pad2 = (n) => String(n).padStart(2, '0');
-
-/** تاريخ محلي بصيغة YYYY-MM-DD مع إزاحة أيام */
 function isoDate(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
+  const d = new Date(); d.setDate(d.getDate() + offsetDays);
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
-
 const nowIso = () => new Date().toISOString();
-const genId = (prefix = '') =>
-  `${prefix}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-
+const genId = (p = '') => `${p}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 const isDateStr = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
-/* ─────────── البذر الأولي (مطابق لتطبيق المريض) ─────────── */
+function hashPass(password, salt) {
+  return createHash('sha256').update(`${salt}:${password}`).digest('hex');
+}
+function genCode() {
+  return `${randomBytes(3).toString('hex').toUpperCase()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
+const ADMIN_PIN = process.env.ADMIN_PIN || '0000';
 
 const SETTINGS_KEY = 'clinic_settings';
-
-export const DEFAULT_SETTINGS = {
-  key: 'clinic',
-  name: 'عيادة النخبة الطبية',
-  tagline: 'صحتك أولوية — بدون انتظار طويل',
-  address: 'شارع الاستقلال، حي النور، الوادي',
-  phone: '032741234',
-  fee: 300,
-  avgVisitMinutes: 10,
-  maxQueuePerDay: 40,
-  openTime: '08:00',
-  closeTime: '17:00',
-  pin: '1234',
-  secretaryPin: '2222',
+const DEFAULT_SETTINGS = {
+  name: 'عيادة النخبة الطبية', tagline: 'صحتك أولوية',
+  address: 'شارع الاستقلال، الوادي', phone: '032741234',
+  fee: 300, avgVisitMinutes: 10, maxQueuePerDay: 40,
+  openTime: '08:00', closeTime: '17:00',
+  secretaryPin: '2222', pin: '1234',
 };
 
-const SEED_CLINICS = [
-  /* [id,name,specialty,city,address,phone,rating,reviews,fee,avg_min,certified,contracted,color,is_open,commission] */
-  ['cl-shifa', 'عيادة الشفاء الطبية', 'طب عام', 'الجزائر الوسطى',
-   'شارع ديدوش مراد، برج المكتبات، الطابق الثالث', '0555123400',
-   4.8, 214, 50, 12, 1, 1, 'from-emerald-500 to-teal-600', 1, 50],
-  ['cl-nour', 'عيادة النور لطب الأسنان', 'طب الأسنان', 'بئر مراد رايس',
-   'حي البدر، عمارة 12، بجانب الصيدلية المركزية', '0661234567',
-   4.6, 98, 80, 20, 1, 1, 'from-sky-500 to-indigo-500', 1, 80],
-  ['cl-basra', 'مركز البصرة الطبي للأطفال', 'طب الأطفال', 'حسين داي',
-   'شارع العقيد لطفي، أمام المسرح البلدي', '0770998811',
-   4.9, 341, 60, 15, 1, 0, 'from-rose-400 to-orange-400', 0, 60],
-  ['cl-hayat', 'عيادة الحياة النسائية', 'نساء وتوليد', 'باب الوادي',
-   'نهج طرابلس، عمارة 4، الطابق الأول', '0550776611',
-   4.4, 76, 100, 18, 1, 0, 'from-fuchsia-500 to-purple-500', 0, 100],
-];
+function getSettings() {
+  const row = get(`SELECT v FROM meta WHERE k=?`, SETTINGS_KEY);
+  if (!row) return DEFAULT_SETTINGS;
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(row.v) }; }
+  catch { return DEFAULT_SETTINGS; }
+}
 
 function bootstrap() {
-  for (const c of SEED_CLINICS) {
-    run(
-      `INSERT OR IGNORE INTO clinics
-       (id,name,specialty,city,address,phone,rating,reviews,fee,avg_minutes,certified,contracted,color,is_open,commission)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      ...c,
-    );
-  }
-
   if (!get(`SELECT k FROM meta WHERE k=?`, SETTINGS_KEY)) {
     run(`INSERT INTO meta(k,v) VALUES (?,?)`, SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
-  }
-
-  /* حشد انتظار تجريبي لعيادة الشفاء — يُعاد زرعه كل يوم جديد فقط */
-  const today = isoDate(0);
-  run(`DELETE FROM bookings WHERE user_id='seed' AND date != ?`, today);
-  const crowd = get(
-    `SELECT COUNT(*) AS n FROM bookings WHERE clinic_id=? AND date=? AND user_id='seed'`,
-    'cl-shifa', today,
-  );
-  if ((crowd?.n ?? 0) === 0) {
-    tx(() => {
-      for (let i = 1; i <= 6; i += 1) {
-        run(
-          `INSERT OR IGNORE INTO bookings
-           (id,clinic_id,user_id,patient_name,whatsapp,disability,date,queue_number,status,fee,created_at)
-           VALUES (?,?,?,?,?,?,?,?,'WAITING',?,?)`,
-          `seed-${today}-${i}`, 'cl-shifa', 'seed', `مرضى مسجلون ${i}`, '', 0,
-          today, i, 50, nowIso(),
-        );
-      }
-    });
   }
 }
 bootstrap();
 
-/* ─────────── المُخطِّطات (Mappers) ─────────── */
-
 function mapClinic(r) {
   return {
-    id: r.id, nameAr: r.name, specialtyAr: r.specialty, city: r.city, address: r.address,
-    phone: r.phone, rating: r.rating, reviews: r.reviews,
+    id: r.id, nameAr: r.name, name: r.name, specialtyAr: r.specialty, specialty: r.specialty,
+    city: r.city, address: r.address, phone: r.phone, rating: r.rating, reviews: r.reviews,
     commission: typeof r.commission === 'number' ? r.commission : 50,
-    onlineEnabled: r.online_enabled !== 0,
-    maxOnline: typeof r.max_online === 'number' ? r.max_online : 30,
+    onlineEnabled: r.online_enabled !== 0, maxOnline: r.max_online ?? 30,
     avgVisitMinutes: r.avg_minutes, certified: r.certified === 1, contracted: r.contracted === 1,
     isOpen: r.is_open === 1, color: r.color,
+    activated: r.activated === 1, isPaused: r.is_paused === 1,
+    tagline: r.tagline || '', createdAt: r.created_at || '',
   };
 }
 
-function mapUser(r) {
+function mapDoctor(r) {
   return {
-    uid: r.uid, name: r.name, email: r.email,
-    phone: r.phone ?? undefined, photoURL: r.photo_url ?? undefined,
-    provider: r.provider,
-    address: r.address || undefined, whatsapp: r.whatsapp || undefined,
-    location: typeof r.lat === 'number' && typeof r.lng === 'number'
-      ? { lat: r.lat, lng: r.lng } : undefined,
-    createdAt: r.created_at,
+    id: r.id, name: r.name, specialty: r.specialty, phone: r.phone || undefined,
+    active: r.is_open === 1, createdAt: '',
   };
 }
 
@@ -256,7 +183,6 @@ function mapBooking(r) {
   };
 }
 
-/* نسخة الحجز الخاصة بلوحة العيادة (doctorId بدل clinicId) */
 function mapClinicBooking(r) {
   const b = mapBooking(r);
   return {
@@ -270,19 +196,10 @@ function mapClinicBooking(r) {
   };
 }
 
-function mapDoctor(r) {
-  return {
-    id: r.id, name: r.name, specialty: r.specialty, phone: r.phone || undefined,
-    active: r.is_open === 1, createdAt: '',
-  };
-}
-
 const BOOKING_SELECT = `
   SELECT b.*, c.name AS clinic_name, c.specialty AS clinic_specialty
   FROM bookings b JOIN clinics c ON c.id = b.clinic_id
 `;
-
-/* ─────────── منطق الأعمال ─────────── */
 
 function nextQueueNumber(clinicId, date) {
   const maxRow = get(
@@ -294,70 +211,13 @@ function nextQueueNumber(clinicId, date) {
 }
 
 function bumpCounter(key, value) {
-  run(
-    `INSERT INTO counters(key,value) VALUES (?,?)
-     ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
-    key, value,
-  );
+  run(`INSERT INTO counters(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value);
 }
 
-/** حجز إلكتروني من تطبيق المريض (الموعد غدًا — يحدده العميل) */
-function createAppBooking(body) {
-  const { clinicId, date, userId, patientName, whatsapp, disability } = body ?? {};
-  if (!clinicId || !isDateStr(date) || !userId) fail('بيانات الحجز غير مكتملة.');
-  if (!patientName || !String(patientName).trim()) fail('أدخل اسم المريض.');
-  if (!whatsapp || !String(whatsapp).trim()) fail('رقم الواتساب مطلوب.');
-
-  return tx(() => {
-    const clinic = get(`SELECT * FROM clinics WHERE id=?`, clinicId);
-    if (!clinic) fail('العيادة غير موجودة.');
-    if (clinic.is_open !== 1) {
-      fail('العيادة مغلقة حاليًا — الحجز متاح عند فتحها من طرف العيادة.');
-    }
-    /* بوابة التسجيل الإلكتروني: يتحكم بها الممرض من اللوحة */
-    if (clinic.online_enabled !== 1) {
-      fail('التسجيل الإلكتروني مغلق حاليًا من إدارة العيادة — توجّه إلى العيادة مباشرة.');
-    }
-    /* سقف عدد التسجيلات الإلكترونية لهذا اليوم (0 = بلا حد) */
-    const cap = typeof clinic.max_online === 'number' ? clinic.max_online : 30;
-    if (cap > 0) {
-      const used = get(
-        `SELECT COUNT(*) AS n FROM bookings
-         WHERE clinic_id=? AND date=? AND user_id NOT LIKE 'guest-%' AND status != 'CANCELLED'`,
-        clinicId, date,
-      )?.n ?? 0;
-      if (used >= cap) {
-        fail(`اكتمل العدد المسموح من التسجيلات الإلكترونية (${cap}) — حاول غدًا أو توجّه للعيادة.`);
-      }
-    }
-
-    const dup = get(
-      `SELECT id FROM bookings WHERE clinic_id=? AND date=? AND user_id=? AND status IN ('WAITING','CURRENT') LIMIT 1`,
-      clinicId, date, userId,
-    );
-    if (dup) fail('لديك حجز نشط بنفس العيادة لهذا اليوم.');
-
-    const n = nextQueueNumber(clinicId, date);
-    bumpCounter(`${clinicId}|${date}`, n);
-
-    const id = genId('bk-');
-    run(
-      `INSERT INTO bookings
-       (id,clinic_id,user_id,patient_name,whatsapp,disability,date,queue_number,status,fee,payment_status,called_at,finished_at,created_at)
-       VALUES (?,?,?,?,?,?,?,?,'WAITING',?,'UNPAID',NULL,NULL,?)`,
-      id, clinicId, userId, String(patientName).trim(), String(whatsapp).trim(),
-      disability ? 1 : 0, date, n, clinic.commission, nowIso(),
-    );
-    return mapBooking(get(`${BOOKING_SELECT} WHERE b.id=?`, id));
-  });
-}
-
-/** تذكرة حضورية من لوحة العيادة (ليوم اليوم) */
 function createWalkinTicket(body) {
   const settings = getSettings();
   const { doctorId, patientName, patientPhone } = body ?? {};
   const date = isoDate(0);
-
   if (!doctorId) fail('الطبيب غير محدد.');
   if (!patientName || !String(patientName).trim()) fail('أدخل اسم المريض.');
   if (!patientPhone || !String(patientPhone).trim()) fail('رقم هاتف المريض مطلوب.');
@@ -365,27 +225,21 @@ function createWalkinTicket(body) {
   return tx(() => {
     const provider = get(`SELECT * FROM clinics WHERE id=?`, doctorId);
     if (!provider) fail('الطبيب غير موجود.');
-    if (provider.is_open !== 1) fail('العيادة مغلقة حاليًا ولا تستقبل أدوارًا جديدة.');
+    if (provider.is_open !== 1) fail('العيادة مغلقة.');
+    if (provider.is_paused === 1) fail('الطابور موقّف حاليًا.');
 
     const sameDay = all(`${BOOKING_SELECT} WHERE b.clinic_id=? AND b.date=?`, doctorId, date);
-
     const clash = sameDay.find(
       (b) => b.whatsapp === patientPhone && (b.status === 'WAITING' || b.status === 'CURRENT'),
     );
-    if (clash) fail('لديك دور نشط بالفعل مع هذا الطبيب اليوم. تابعيه من صفحة «حجوزاتي».');
-
-    const taken = sameDay.filter((b) => b.status !== 'CANCELLED').length;
-    if (taken >= settings.maxQueuePerDay) {
-      fail(`اكتملت أدوار اليوم لهذا الطبيب (${settings.maxQueuePerDay} دورًا). يرجى المحاولة غدًا.`);
-    }
+    if (clash) fail('لديك دور نشط بالفعل اليوم.');
 
     const n = nextQueueNumber(doctorId, date);
     bumpCounter(`${doctorId}|${date}`, n);
 
     const id = genId('bk-');
     run(
-      `INSERT INTO bookings
-       (id,clinic_id,user_id,patient_name,whatsapp,disability,date,queue_number,status,fee,payment_status,called_at,finished_at,created_at)
+      `INSERT INTO bookings (id,clinic_id,user_id,patient_name,whatsapp,disability,date,queue_number,status,fee,payment_status,called_at,finished_at,created_at)
        VALUES (?,?,?,?,?,0,?,?,'WAITING',?,'UNPAID',NULL,NULL,?)`,
       id, doctorId, `guest-${patientPhone}`, String(patientName).trim(), String(patientPhone),
       date, n, provider.commission, nowIso(),
@@ -394,66 +248,51 @@ function createWalkinTicket(body) {
   });
 }
 
-/** زر «التالي»: إنهاء الحالي (مع تسويّله مدفوعًا) ونداء التالي — أولوية الإعاقة */
 function callNextPatient(doctorId, date) {
   if (!doctorId || !isDateStr(date)) fail('معطيات الطابور غير مكتملة.');
   return tx(() => {
+    const clinic = get(`SELECT * FROM clinics WHERE id=?`, doctorId);
+    if (clinic && clinic.is_paused === 1) fail('الطابور موقّف حاليًا.');
+
     const current = get(
-      `SELECT id FROM bookings WHERE clinic_id=? AND date=? AND status='CURRENT' LIMIT 1`,
-      doctorId, date,
+      `SELECT id FROM bookings WHERE clinic_id=? AND date=? AND status='CURRENT' LIMIT 1`, doctorId, date,
     );
     const next = get(
       `SELECT id FROM bookings WHERE clinic_id=? AND date=? AND status='WAITING'
-       ORDER BY disability DESC, queue_number ASC LIMIT 1`,
-      doctorId, date,
+       ORDER BY disability DESC, queue_number ASC LIMIT 1`, doctorId, date,
     );
 
     if (!next) {
       if (!current) fail('لا يوجد مرضى في الانتظار.');
-      run(
-        `UPDATE bookings SET status='COMPLETED', finished_at=?, payment_status='PAID' WHERE id=?`,
-        nowIso(), current.id,
-      );
+      run(`UPDATE bookings SET status='COMPLETED', finished_at=?, payment_status='PAID' WHERE id=?`, nowIso(), current.id);
       return null;
     }
 
     const ts = nowIso();
     if (current) {
-      run(
-        `UPDATE bookings SET status='COMPLETED', finished_at=?, payment_status='PAID' WHERE id=?`,
-        ts, current.id,
-      );
+      run(`UPDATE bookings SET status='COMPLETED', finished_at=?, payment_status='PAID' WHERE id=?`, ts, current.id);
     }
     run(`UPDATE bookings SET status='CURRENT', called_at=? WHERE id=?`, ts, next.id);
     return mapClinicBooking(get(`${BOOKING_SELECT} WHERE b.id=?`, next.id));
   });
 }
 
-/** استدعاء دور محدد — يعيد الحالي السابق إلى الانتظار */
 function promoteSpecific(id) {
   return tx(() => {
     const booking = get(`${BOOKING_SELECT} WHERE b.id=?`, id);
     if (!booking) fail('الحجز غير موجود.');
     if (booking.status === 'CURRENT') return mapClinicBooking(booking);
-    if (booking.status !== 'WAITING') fail('لا يمكن استدعاء هذا الدور في وضعه الحالي.');
+    if (booking.status !== 'WAITING') fail('لا يمكن استدعاء هذا الدور.');
 
     const ts = nowIso();
-    run(
-      `UPDATE bookings SET status='WAITING', called_at=NULL
-       WHERE clinic_id=? AND date=? AND status='CURRENT' AND id!=?`,
-      booking.clinic_id, booking.date, id,
-    );
+    run(`UPDATE bookings SET status='WAITING', called_at=NULL WHERE clinic_id=? AND date=? AND status='CURRENT' AND id!=?`,
+      booking.clinic_id, booking.date, id);
     run(`UPDATE bookings SET status='CURRENT', called_at=? WHERE id=?`, ts, id);
     return mapClinicBooking(get(`${BOOKING_SELECT} WHERE b.id=?`, id));
   });
 }
 
-const ALLOWED_TRANSITIONS = {
-  COMPLETED: ['WAITING', 'CURRENT'],
-  NO_SHOW: ['WAITING', 'CURRENT'],
-  /* يُسمح بإلغاء الحالي أيضًا (حالة إلغاء المريض من تطبيقه) */
-  CANCELLED: ['WAITING', 'CURRENT'],
-};
+const ALLOWED_TRANSITIONS = { COMPLETED: ['WAITING', 'CURRENT'], NO_SHOW: ['WAITING', 'CURRENT'], CANCELLED: ['WAITING', 'CURRENT'] };
 
 function setBookingStatus(id, status, ownerUid) {
   if (!ALLOWED_TRANSITIONS[status]) fail('حالة غير معروفة.');
@@ -461,15 +300,10 @@ function setBookingStatus(id, status, ownerUid) {
     const booking = get(`SELECT * FROM bookings WHERE id=?`, id);
     if (!booking) fail('الحجز غير موجود.');
     if (ownerUid !== undefined && booking.user_id !== ownerUid) fail('الحجز غير موجود.');
-    if (!ALLOWED_TRANSITIONS[status].includes(booking.status)) {
-      fail('لا يمكن تنفيذ هذه العملية على الحجز في وضعه الحالي.');
-    }
+    if (!ALLOWED_TRANSITIONS[status].includes(booking.status)) fail('لا يمكن تنفيذ هذه العملية.');
     const ts = nowIso();
     const paid = status === 'COMPLETED' ? `, payment_status='PAID'` : '';
-    const finished =
-      status === 'COMPLETED' || status === 'NO_SHOW'
-        ? `, finished_at='${ts}'`
-        : '';
+    const finished = (status === 'COMPLETED' || status === 'NO_SHOW') ? `, finished_at='${ts}'` : '';
     run(`UPDATE bookings SET status=?${paid}${finished} WHERE id=?`, status, id);
   });
 }
@@ -483,58 +317,7 @@ function togglePayment(id) {
   });
 }
 
-/* ─────────── الإعدادات ─────────── */
-
-function getSettings() {
-  const row = get(`SELECT v FROM meta WHERE k=?`, SETTINGS_KEY);
-  if (!row) return DEFAULT_SETTINGS;
-  try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(row.v) };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
-}
-
-/* ─────────── خادم HTTP ─────────── */
-
-const json = (res, code, payload) => {
-  const body = JSON.stringify(payload);
-  res.writeHead(code, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-  });
-  res.end(body);
-};
-
-function readBody(req) {
-  return new Promise((resolveBody, rejectBody) => {
-    let size = 0;
-    const chunks = [];
-    req.on('data', (chunk) => {
-      size += chunk.length;
-      if (size > 1_000_000) {
-        rejectBody(new Error('payload too large'));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      if (chunks.length === 0) return resolveBody(undefined);
-      try {
-        resolveBody(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        rejectBody(new Error('invalid JSON'));
-      }
-    });
-    req.on('error', rejectBody);
-  });
-}
-
-/* ============================================================================
-   النداء الصوتي العربي — توليد MP3 عبر خدمة Edge TTS
-   (منطق منقول من مشروع node-edge-tts على GitHub — MIT — بصفر تبعيات)
-   ========================================================================== */
+/* ── TTS ── */
 
 const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const CHROMIUM_FULL_VERSION = '143.0.3650.75';
@@ -546,15 +329,12 @@ function generateSecMsGecToken() {
   return createHash('sha256').update(`${rounded}${TRUSTED_CLIENT_TOKEN}`, 'ascii').digest('hex').toUpperCase();
 }
 
-const DEFAULT_TTS_VOICE = 'ar-DZ-IsmaelNeural'; /* صوت عربي جزائري رجالي */
+const DEFAULT_TTS_VOICE = 'ar-DZ-IsmaelNeural';
 
-function escapeXml(unsafe) {
-  return unsafe.replace(/[<>&"']/g, (c) =>
-    c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === '"' ? '&quot;' : '&apos;',
-  );
+function escapeXml(s) {
+  return s.replace(/[<>&"']/g, (c) => c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c === '"' ? '&quot;' : '&apos;');
 }
 
-/** توليد ملف صوتي لنص عربي وحفظه في المسار المحدد */
 function edgeTtsToFile(text, audioPath, voice, lang) {
   return new Promise((resolve, reject) => {
     const url =
@@ -566,70 +346,43 @@ function edgeTtsToFile(text, audioPath, voice, lang) {
       host: 'speech.platform.bing.com',
       origin: 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
       headers: {
-        Pragma: 'no-cache',
-        'Cache-Control': 'no-cache',
-        'User-Agent':
-          `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ` +
-          `(KHTML, like Gecko) Chrome/${CHROMIUM_FULL_VERSION.split('.')[0]}.0.0.0 Safari/537.36 Edg/${CHROMIUM_FULL_VERSION.split('.')[0]}.0.0.0`,
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'en-US,en;q=0.9',
+        Pragma: 'no-cache', 'Cache-Control': 'no-cache',
+        'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_FULL_VERSION.split('.')[0]}.0.0.0 Safari/537.36 Edg/${CHROMIUM_FULL_VERSION.split('.')[0]}.0.0.0`,
+        'Accept-Encoding': 'gzip, deflate, br', 'Accept-Language': 'en-US,en;q=0.9',
       },
     });
 
-    const timer = setTimeout(() => {
-      try { ws.close(); } catch { /* تجاهل */ }
-      reject(new Error('TTS timeout'));
-    }, 15000);
-
+    const timer = setTimeout(() => { try { ws.close(); } catch {} reject(new Error('TTS timeout')); }, 10000);
     const fail = (err) => { clearTimeout(timer); reject(err); };
-
     ws.on('error', fail);
     ws.on('open', () => {
-      ws.send(
-        `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
-        JSON.stringify({
-          context: {
-            synthesis: {
-              audio: {
-                metadataoptions: { sentenceBoundaryEnabled: 'false', wordBoundaryEnabled: 'true' },
-                outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
-              },
-            },
-          },
-        }),
-      );
+      ws.send(`Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n` +
+        JSON.stringify({ context: { synthesis: { audio: { metadataoptions: { sentenceBoundaryEnabled: 'false', wordBoundaryEnabled: 'false' }, outputFormat: 'audio-24khz-48kbitrate-mono-mp3' } } } }));
       const requestId = randomBytes(16).toString('hex');
-      ws.send(
-        `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n` +
-        `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="${lang}">` +
-        `<voice name="${voice}"><prosody rate="default" pitch="default" volume="default">${escapeXml(text)}</prosody></voice></speak>`,
-      );
+      ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n` +
+        `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${lang}">` +
+        `<voice name="${voice}"><prosody rate="10%" pitch="default">${escapeXml(text)}</prosody></voice></speak>`);
     });
 
-    let stream = null;
-    let bytes = 0;
+    let stream = null; let bytes = 0;
     ws.on('message', (data, isBinary) => {
       if (isBinary) {
-        const sep = 'Path:audio\r\n';
-        const idx = data.indexOf(sep) + sep.length;
-        const chunk = data.subarray(idx);
-        bytes += chunk.length;
+        const sep = 'Path:audio\r\n'; const idx = data.indexOf(sep) + sep.length;
+        const chunk = data.subarray(idx); bytes += chunk.length;
         if (!stream) stream = createWriteStream(audioPath);
         stream.write(chunk);
         return;
       }
-      const message = data.toString();
-      if (message.includes('Path:turn.end')) {
+      if (data.toString().includes('Path:turn.end')) {
         clearTimeout(timer);
-        const done = () => { try { ws.close(); } catch { /* تجاهل */ } resolve(bytes); };
-        if (stream) stream.end(done);
-        else done();
+        const done = () => { try { ws.close(); } catch {} resolve(bytes); };
+        if (stream) stream.end(done); else done();
       }
     });
   });
 }
 
-const ttsInFlight = new Map(); /* منع التوليد المتزامن المكرر لنفس النص */
+const ttsInFlight = new Map();
 
 async function handleTts(req, res, query) {
   const text = String(query.get('text') ?? '').trim().slice(0, 500);
@@ -646,11 +399,11 @@ async function handleTts(req, res, query) {
     if (ttsInFlight.has(hash)) await ttsInFlight.get(hash);
     else {
       const job = edgeTtsToFile(text, outFile, voice, lang)
-        .catch((err) => { try { unlinkSync(outFile); } catch { /* تجاهل */ } throw err; })
+        .catch((err) => { try { unlinkSync(outFile); } catch {} throw err; })
         .finally(() => ttsInFlight.delete(hash));
       ttsInFlight.set(hash, job);
       try { await job; }
-      catch { return json(res, 502, { error: 'تعذر توليد الصوت حاليًا.' }); }
+      catch { return json(res, 502, { error: 'تعذر توليد الصوت.' }); }
     }
   }
 
@@ -658,56 +411,262 @@ async function handleTts(req, res, query) {
   createReadStream(outFile).pipe(res);
 }
 
-async function handle(req, res, pathname, query) {
-  const seg = pathname.split('/').filter(Boolean); // ['api', ...]
+/* ── HTTP Handler ── */
 
-  /* ── النداء الصوتي ── */
+const json = (res, code, payload) => {
+  const body = JSON.stringify(payload);
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(body);
+};
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', (chunk) => { size += chunk.length; if (size > 1_000_000) { reject(new Error('too large')); req.destroy(); return; } chunks.push(chunk); });
+    req.on('end', () => { if (chunks.length === 0) return resolve(undefined); try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch { reject(new Error('invalid JSON')); } });
+    req.on('error', reject);
+  });
+}
+
+async function handle(req, res, pathname, query) {
+  const seg = pathname.split('/').filter(Boolean);
+
+  /* ── TTS ── */
   if (req.method === 'GET' && pathname === '/api/tts') return handleTts(req, res, query);
 
-  /* ── حالة التسجيل الإلكتروني (تُستهلك في اللوحة والتطبيق) ── */
+  /* ── Online Status ── */
   if (req.method === 'GET' && pathname === '/api/online-status') {
     const clinicId = query.get('clinicId') ?? '';
     const date = query.get('date') ?? isoDate(1);
     const c = get(`SELECT * FROM clinics WHERE id=?`, clinicId);
     if (!c) return json(res, 404, { error: 'العيادة غير موجودة.' });
     const max = typeof c.max_online === 'number' ? c.max_online : 30;
-    const used = get(
-      `SELECT COUNT(*) AS n FROM bookings
-       WHERE clinic_id=? AND date=? AND user_id NOT LIKE 'guest-%' AND status != 'CANCELLED'`,
-      clinicId, date,
-    )?.n ?? 0;
+    const used = get(`SELECT COUNT(*) AS n FROM bookings WHERE clinic_id=? AND date=? AND user_id NOT LIKE 'guest-%' AND status != 'CANCELLED'`, clinicId, date)?.n ?? 0;
+    return json(res, 200, { enabled: c.is_open === 1 && c.online_enabled === 1, used, max, remaining: max > 0 ? Math.max(0, max - used) : null });
+  }
+
+  /* ── System ── */
+  if (req.method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, db: DB_PATH });
+
+  /* ══════════════════════════════════════════════
+     لوحة الأدمين — إدارة العيادات
+     ══════════════════════════════════════════════ */
+
+  /* ── دخول الأدمين ── */
+  if (pathname === '/api/admin/login' && req.method === 'POST') {
+    const body = await readBody(req);
+    const pin = String(body?.pin ?? '').trim();
+    if (pin !== ADMIN_PIN) return json(res, 401, { error: 'رمز الأدمين غير صحيح.' });
+    const token = genId('adm-');
+    run(`INSERT OR REPLACE INTO meta(k,v) VALUES (?,?)`, `admin_token`, token);
+    return json(res, 200, { ok: true, token });
+  }
+
+  /* middleware: تحقق من صلاحية الأدمين */
+  const isAdmin = (req) => {
+    const auth = req.headers.authorization || '';
+    const token = auth.replace('Bearer ', '');
+    const stored = get(`SELECT v FROM meta WHERE k=?`, 'admin_token');
+    return stored && stored.v === token;
+  };
+
+  /* ── قائمة جميع العيادات (أدمين) ── */
+  if (pathname === '/api/admin/clinics' && req.method === 'GET') {
+    if (!isAdmin(req)) return json(res, 401, { error: 'غير مصرح.' });
+    const clinics = all(`SELECT * FROM clinics ORDER BY created_at DESC`).map(mapClinic);
+    return json(res, 200, clinics);
+  }
+
+  /* ── إضافة عيادة جديدة ── */
+  if (pathname === '/api/admin/clinics' && req.method === 'POST') {
+    if (!isAdmin(req)) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    const name = String(body?.name ?? '').trim();
+    const specialty = String(body?.specialty ?? '').trim();
+    if (!name) fail('اسم العيادة مطلوب.');
+    if (!specialty) fail('التخصص مطلوب.');
+
+    const id = genId('cl-');
+    const code = genCode();
+    const salt = randomBytes(16).toString('hex');
+    const ts = nowIso();
+
+    run(
+      `INSERT INTO clinics (id, name, specialty, city, address, phone, fee, commission, color, activation_code, activated, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      id, name, specialty,
+      String(body?.city ?? '').trim(),
+      String(body?.address ?? '').trim(),
+      String(body?.phone ?? '').trim(),
+      Number(body?.fee) || 200,
+      Number(body?.commission) || 50,
+      String(body?.color ?? '').trim(),
+      code,
+      ts,
+    );
+
+    return json(res, 200, { ok: true, id, activationCode: code });
+  }
+
+  /* ── حذف عيادة ── */
+  if (pathname === '/api/admin/clinics/delete' && req.method === 'POST') {
+    if (!isAdmin(req)) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    const clinicId = String(body?.id ?? '').trim();
+    if (!clinicId) fail('معرّف العيادة مطلوب.');
+    const row = get(`SELECT id FROM clinics WHERE id=?`, clinicId);
+    if (!row) return json(res, 404, { error: 'العيادة غير موجودة.' });
+    run(`DELETE FROM bookings WHERE clinic_id=?`, clinicId);
+    run(`DELETE FROM counters WHERE key LIKE ?`, `${clinicId}|%`);
+    run(`DELETE FROM clinics WHERE id=?`, clinicId);
+    return json(res, 200, { ok: true });
+  }
+
+  /* ══════════════════════════════════════════════
+     تنشيط العيادة — كود لمرة واحدة
+     ══════════════════════════════════════════════ */
+
+  if (pathname === '/api/clinic/activate' && req.method === 'POST') {
+    const body = await readBody(req);
+    const code = String(body?.activationCode ?? '').trim().toUpperCase();
+    const password = String(body?.password ?? '').trim();
+    const clinicName = String(body?.clinicName ?? '').trim();
+    const tagline = String(body?.tagline ?? '').trim();
+    const address = String(body?.address ?? '').trim();
+    const phone = String(body?.phone ?? '').trim();
+
+    if (!code) fail('كود التفعيل مطلوب.');
+    if (!password || password.length < 4) fail('كلمة المرور يجب أن تكون 4 أحرف على الأقل.');
+    if (!clinicName) fail('اسم العيادة مطلوب.');
+
+    const clinic = get(`SELECT * FROM clinics WHERE activation_code=?`, code);
+    if (!clinic) fail('كود التفعيل غير صحيح.');
+    if (clinic.activated === 1) fail('تم استخدام هذا الكود بالفعل.');
+
+    const salt = randomBytes(16).toString('hex');
+    const passHash = hashPass(password, salt);
+
+    run(
+      `UPDATE clinics SET activated=1, password_hash=?, password_salt=?, name=?, tagline=?, address=?, phone=? WHERE id=?`,
+      passHash, salt, clinicName, tagline, address, phone, clinic.id,
+    );
+
+    const token = genId('c-');
+    run(`INSERT OR REPLACE INTO meta(k,v) VALUES (?,?)`, `clinic_token_${clinic.id}`, token);
+
+    return json(res, 200, { ok: true, clinicId: clinic.id, token, name: clinicName });
+  }
+
+  /* ── دخول العيادة ── */
+  if (pathname === '/api/clinic/login' && req.method === 'POST') {
+    const body = await readBody(req);
+    const clinicId = String(body?.clinicId ?? '').trim();
+    const password = String(body?.password ?? '').trim();
+    if (!clinicId || !password) fail('البيانات غير مكتملة.');
+
+    const clinic = get(`SELECT * FROM clinics WHERE id=?`, clinicId);
+    if (!clinic) return json(res, 404, { error: 'العيادة غير موجودة.' });
+    if (clinic.activated !== 1) return json(res, 403, { error: 'العيادة غير مفعّلة بعد.' });
+    if (!clinic.password_hash || !clinic.password_salt) return json(res, 403, { error: 'لم يتم تعيين كلمة مرور.' });
+
+    const hash = hashPass(password, clinic.password_salt);
+    if (hash !== clinic.password_hash) return json(res, 401, { error: 'كلمة المرور غير صحيحة.' });
+
+    const token = genId('c-');
+    run(`INSERT OR REPLACE INTO meta(k,v) VALUES (?,?)`, `clinic_token_${clinic.id}`, token);
+
+    return json(res, 200, { ok: true, token, name: clinic.name, tagline: clinic.tagline });
+  }
+
+  /* middleware: تحقق من صلاحية العيادة */
+  const getClinicId = (req) => {
+    const auth = req.headers.authorization || '';
+    const token = auth.replace('Bearer ', '');
+    for (const row of all(`SELECT k, v FROM meta WHERE k LIKE 'clinic_token_%'`)) {
+      if (row.v === token) {
+        return row.k.replace('clinic_token_', '');
+      }
+    }
+    return null;
+  };
+
+  /* ══════════════════════════════════════════════
+     لوحة العيادة
+     ══════════════════════════════════════════════ */
+
+  /* ── بيانات لوحة العيادة (مقيدة بالعيادة) ── */
+  if (pathname === '/api/clinic/dashboard' && req.method === 'GET') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+
+    const date = query.get('date');
+    if (!isDateStr(date)) fail('التاريخ غير صحيح.');
+
+    const clinic = get(`SELECT * FROM clinics WHERE id=?`, clinicId);
+    const bookings = all(`${BOOKING_SELECT} WHERE b.clinic_id=? AND b.date=? ORDER BY b.queue_number`, clinicId, date).map(mapClinicBooking);
+
     return json(res, 200, {
-      enabled: c.is_open === 1 && c.online_enabled === 1,
-      used, max, remaining: max > 0 ? Math.max(0, max - used) : null,
+      clinic: clinic ? mapClinic(clinic) : null,
+      bookings,
     });
   }
 
-  /* ── سجل مرضى الحجوزات الإلكترونية (حضور/دفع) ── */
-  if (req.method === 'GET' && pathname === '/api/patients') {
-    const date = query.get('date') ?? isoDate(0);
-    const clinicId = query.get('clinicId');
-    let sql =
-      `${BOOKING_SELECT} WHERE b.date=? AND b.user_id NOT LIKE 'guest-%'`;
-    const params = [date];
-    if (clinicId) { sql += ` AND b.clinic_id=?`; params.push(clinicId); }
-    sql += ` ORDER BY b.queue_number ASC`;
-    return json(res, 200, all(sql, ...params).map(mapClinicBooking));
+  /* ── إيقاف/استئناف الطابور ── */
+  if (pathname === '/api/clinic/pause' && req.method === 'POST') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    const paused = body?.paused === true;
+    run(`UPDATE clinics SET is_paused=? WHERE id=?`, paused ? 1 : 0, clinicId);
+    return json(res, 200, { ok: true, isPaused: paused });
   }
 
-  /* ── نظام ── */
-  if (req.method === 'POST' && pathname === '/api/bootstrap') return json(res, 200, { ok: true });
-  if (req.method === 'GET' && pathname === '/api/health') return json(res, 200, { ok: true, db: DB_PATH });
-  if (req.method === 'GET' && pathname === '/api/debug') return json(res, 200, {
-    dist: STATIC_DIST,
-    distExists: existsSync(STATIC_DIST),
-    indexExists: existsSync(path.join(STATIC_DIST, 'index.html')),
-    cwd: __dirname,
-  });
+  /* ── استدعاء التالي (مقيد بالعيادة) ── */
+  if (pathname === '/api/clinic/call-next' && req.method === 'POST') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    const date = body?.date || isoDate(0);
+    return json(res, 200, callNextPatient(clinicId, date));
+  }
 
-  /* ── العيادات (مقدمو الخدمة المشتركون) ── */
-  if (seg[1] === 'clinics') {
+  /* ── إتمام حجز (مقيد) ── */
+  if (pathname === '/api/clinic/complete' && req.method === 'POST') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    const bookingId = String(body?.bookingId ?? '').trim();
+    if (!bookingId) fail('معرّف الحجز مطلوب.');
+    const booking = get(`SELECT * FROM bookings WHERE id=? AND clinic_id=?`, bookingId, clinicId);
+    if (!booking) return json(res, 404, { error: 'الحجز غير موجود.' });
+    setBookingStatus(bookingId, 'COMPLETED');
+    return json(res, 200, { ok: true });
+  }
+
+  /* ── إضافة مريض يدوي (مقيد) ── */
+  if (pathname === '/api/clinic/add-walkin' && req.method === 'POST') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+    const body = await readBody(req);
+    return json(res, 200, createWalkinTicket({ ...body, doctorId: clinicId }));
+  }
+
+  /* ── معلومات العيادة ── */
+  if (pathname === '/api/clinic/info' && req.method === 'GET') {
+    const clinicId = getClinicId(req);
+    if (!clinicId) return json(res, 401, { error: 'غير مصرح.' });
+    const clinic = get(`SELECT * FROM clinics WHERE id=?`, clinicId);
+    return json(res, 200, clinic ? mapClinic(clinic) : null);
+  }
+
+  /* ══════════════════════════════════════════════
+     API قديمة (للتوافق مع تطبيق المريض)
+     ══════════════════════════════════════════════ */
+
+  /* ── العيادات (عام) ── */
+  if (seg[1] === 'clinics' && !seg[1].startsWith('admin') && !seg[1].startsWith('clinic')) {
     if (req.method === 'GET' && seg.length === 2) {
-      return json(res, 200, all(`SELECT * FROM clinics ORDER BY rating DESC`).map(mapClinic));
+      return json(res, 200, all(`SELECT * FROM clinics WHERE activated=1 AND is_open=1 ORDER BY rating DESC`).map(mapClinic));
     }
     if (req.method === 'GET' && seg.length === 3) {
       const row = get(`SELECT * FROM clinics WHERE id=?`, seg[2]);
@@ -717,42 +676,16 @@ async function handle(req, res, pathname, query) {
       const body = await readBody(req);
       const row = get(`SELECT * FROM clinics WHERE id=?`, seg[2]);
       if (!row) return json(res, 404, { error: 'العيادة غير موجودة.' });
-
-      const sets = [];
-      const params = [];
+      const sets = []; const params = [];
       if (typeof body.isOpen === 'boolean') { sets.push('is_open=?'); params.push(body.isOpen ? 1 : 0); }
-      if (typeof body.active === 'boolean') { sets.push('is_open=?'); params.push(body.active ? 1 : 0); }
-      if (typeof body.onlineEnabled === 'boolean') {
-        sets.push('online_enabled=?'); params.push(body.onlineEnabled ? 1 : 0);
-      }
-      if (body.maxOnline !== undefined) {
-        const v = Math.max(0, Math.round(Number(body.maxOnline)));
-        if (!Number.isFinite(v)) fail('قيمة عدد التسجيلات غير صحيحة.');
-        sets.push('max_online=?'); params.push(v);
-      }
-      if (body.commission !== undefined) {
-        const v = Math.max(0, Math.round(Number(body.commission)));
-        if (!Number.isFinite(v)) fail('قيمة العمولة غير صحيحة.');
-        sets.push('commission=?'); params.push(v);
-      }
+      if (typeof body.onlineEnabled === 'boolean') { sets.push('online_enabled=?'); params.push(body.onlineEnabled ? 1 : 0); }
+      if (body.maxOnline !== undefined) { sets.push('max_online=?'); params.push(Math.max(0, Math.round(Number(body.maxOnline)))); }
+      if (body.commission !== undefined) { sets.push('commission=?'); params.push(Math.max(0, Math.round(Number(body.commission)))); }
       for (const col of ['name', 'specialty', 'city', 'address', 'phone']) {
         if (typeof body[col] === 'string') { sets.push(`${col}=?`); params.push(body[col].trim()); }
       }
-      if (sets.length > 0) {
-        params.push(seg[2]);
-        run(`UPDATE clinics SET ${sets.join(', ')} WHERE id=?`, ...params);
-      }
+      if (sets.length > 0) { params.push(seg[2]); run(`UPDATE clinics SET ${sets.join(', ')} WHERE id=?`, ...params); }
       return json(res, 200, mapClinic(get(`SELECT * FROM clinics WHERE id=?`, seg[2])));
-    }
-    if (req.method === 'DELETE' && seg.length === 3) {
-      const used = get(`SELECT COUNT(*) AS n FROM bookings WHERE clinic_id=?`, seg[2]);
-      if ((used?.n ?? 0) > 0) {
-        fail('لا يمكن حذف طبيب له حجوزات سابقة — أوقف نشاطه بدلًا من حذفه.');
-      }
-      const row = get(`SELECT id FROM clinics WHERE id=?`, seg[2]);
-      if (!row) return json(res, 404, { error: 'الطبيب غير موجود.' });
-      run(`DELETE FROM clinics WHERE id=?`, seg[2]);
-      return json(res, 200, { ok: true });
     }
   }
 
@@ -761,10 +694,7 @@ async function handle(req, res, pathname, query) {
     if (req.method === 'GET') return json(res, 200, getSettings());
     if (req.method === 'PUT') {
       const body = await readBody(req);
-      run(
-        `INSERT INTO meta(k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`,
-        SETTINGS_KEY, JSON.stringify({ ...getSettings(), ...body }),
-      );
+      run(`INSERT INTO meta(k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, SETTINGS_KEY, JSON.stringify({ ...getSettings(), ...body }));
       return json(res, 200, { ok: true });
     }
   }
@@ -772,7 +702,7 @@ async function handle(req, res, pathname, query) {
   /* ── الحجوزات ── */
   if (pathname === '/api/bookings' && req.method === 'POST') {
     const body = await readBody(req);
-    return json(res, 200, createAppBooking(body));
+    return json(res, 200, createWalkinTicket(body));
   }
 
   if (pathname === '/api/walkin' && req.method === 'POST') {
@@ -781,16 +711,13 @@ async function handle(req, res, pathname, query) {
   }
 
   if (pathname === '/api/bookings' && req.method === 'GET') {
-    const clauses = [];
-    const params = [];
+    const clauses = []; const params = [];
     if (query.get('date')) { clauses.push('b.date=?'); params.push(query.get('date')); }
     if (query.get('doctorId')) { clauses.push('b.clinic_id=?'); params.push(query.get('doctorId')); }
     if (query.get('phone')) { clauses.push('b.whatsapp=?'); params.push(query.get('phone')); }
     if (query.get('userId')) { clauses.push('b.user_id=?'); params.push(query.get('userId')); }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const order = query.get('userId') || query.get('phone')
-      ? 'ORDER BY b.created_at DESC'
-      : 'ORDER BY b.queue_number ASC';
+    const order = query.get('userId') || query.get('phone') ? 'ORDER BY b.created_at DESC' : 'ORDER BY b.queue_number ASC';
     const rows = all(`${BOOKING_SELECT} ${where} ${order}`, ...params);
     const mapper = query.get('view') === 'clinic' ? mapClinicBooking : mapBooking;
     return json(res, 200, rows.map(mapper));
@@ -821,13 +748,13 @@ async function handle(req, res, pathname, query) {
     return json(res, 200, callNextPatient(body?.doctorId, body?.date));
   }
 
-  /* ── عروض لوحة العيادة ── */
+  /* ── Dashboard قديم (للتوافق) ── */
   if (pathname === '/api/dashboard' && req.method === 'GET') {
     const date = query.get('date');
     if (!isDateStr(date)) fail('التاريخ غير صحيح.');
     const [settings, doctors, bookings] = [
       getSettings(),
-      all(`SELECT * FROM clinics ORDER BY name`).map(mapDoctor),
+      all(`SELECT * FROM clinics WHERE activated=1 ORDER BY name`).map(mapDoctor),
       all(`${BOOKING_SELECT} WHERE b.date=? ORDER BY b.queue_number`, date).map(mapClinicBooking),
     ];
     return json(res, 200, { settings, doctors, bookings });
@@ -836,20 +763,20 @@ async function handle(req, res, pathname, query) {
   if (seg[1] === 'ticket' && req.method === 'GET' && seg.length === 3) {
     const raw = get(`${BOOKING_SELECT} WHERE b.id=?`, seg[2]);
     if (!raw) return json(res, 200, null);
-    const siblings = all(
-      `${BOOKING_SELECT} WHERE b.clinic_id=? AND b.date=? ORDER BY b.queue_number`,
-      raw.clinic_id, raw.date,
-    );
-    const aheadCount = siblings.filter(
-      (b) => b.status === 'WAITING' && b.queue_number < raw.queue_number,
-    ).length;
+    const siblings = all(`${BOOKING_SELECT} WHERE b.clinic_id=? AND b.date=? ORDER BY b.queue_number`, raw.clinic_id, raw.date);
+    const aheadCount = siblings.filter((b) => b.status === 'WAITING' && b.queue_number < raw.queue_number).length;
     const current = siblings.find((b) => b.status === 'CURRENT');
-    return json(res, 200, {
-      booking: query.get('view') === 'clinic' ? mapClinicBooking(raw) : mapBooking(raw),
-      aheadCount,
-      currentNumber: current?.queue_number ?? null,
-      settings: getSettings(),
-    });
+    return json(res, 200, { booking: query.get('view') === 'clinic' ? mapClinicBooking(raw) : mapBooking(raw), aheadCount, currentNumber: current?.queue_number ?? null, settings: getSettings() });
+  }
+
+  if (pathname === '/api/patients' && req.method === 'GET') {
+    const date = query.get('date') ?? isoDate(0);
+    const clinicId = query.get('clinicId');
+    let sql = `${BOOKING_SELECT} WHERE b.date=? AND b.user_id NOT LIKE 'guest-%'`;
+    const params = [date];
+    if (clinicId) { sql += ` AND b.clinic_id=?`; params.push(clinicId); }
+    sql += ` ORDER BY b.queue_number ASC`;
+    return json(res, 200, all(sql, ...params).map(mapClinicBooking));
   }
 
   if (pathname === '/api/stats/week' && req.method === 'GET') {
@@ -858,90 +785,24 @@ async function handle(req, res, pathname, query) {
       const date = isoDate(-i);
       const rows = all(`SELECT status, fee FROM bookings WHERE date=?`, date);
       const completed = rows.filter((r) => r.status === 'COMPLETED');
-      result.push({
-        date,
-        total: rows.length,
-        completed: completed.length,
-        revenue: completed.reduce((sum, r) => sum + r.fee, 0),
-      });
+      result.push({ date, total: rows.length, completed: completed.length, revenue: completed.reduce((sum, r) => sum + r.fee, 0) });
     }
     return json(res, 200, result);
   }
 
-  if (pathname === '/api/admin/reset' && req.method === 'POST') {
-    tx(() => {
-      run(`DELETE FROM bookings`);
-      run(`DELETE FROM counters`);
-      run(`DELETE FROM meta`);
-      run(`DELETE FROM auth_credentials`);
-      run(`DELETE FROM users`);
-    });
-    return json(res, 200, { ok: true });
-  }
-
-  /* ── المستخدمون ── */
-  if (pathname === '/api/users/google' && req.method === 'POST') {
-    const p = await readBody(req);
-    if (!p?.sub) fail('معرّف Google مفقود.');
-    const uid = `gg-${p.sub}`;
-    const existing = get(`SELECT * FROM users WHERE uid=?`, uid);
-    if (!existing) {
-      run(
-        `INSERT INTO users (uid,name,email,phone,provider,photo_url,address,whatsapp,created_at)
-         VALUES (?,?,?,NULL,'google',?,'','',?)`,
-        uid, (p.name ?? '').trim() || 'مستخدم Google', (p.email ?? '').trim(),
-        p.picture ?? null, nowIso(),
-      );
-    } else if ((p.name ?? '').trim() && p.name.trim() !== existing.name) {
-      run(`UPDATE users SET name=?, photo_url=COALESCE(?, photo_url) WHERE uid=?`,
-        p.name.trim(), p.picture ?? null, uid);
-    }
-    return json(res, 200, mapUser(get(`SELECT * FROM users WHERE uid=?`, uid)));
-  }
-
-  if (seg[1] === 'users' && seg.length === 3) {
-    const uid = seg[2];
-    if (req.method === 'GET') {
-      const row = get(`SELECT * FROM users WHERE uid=?`, uid);
-      return json(res, 200, row ? mapUser(row) : null);
-    }
-    if (req.method === 'PATCH') {
-      const base = get(`SELECT * FROM users WHERE uid=?`, uid);
-      if (!base) return json(res, 404, { error: 'الحساب غير موجود.' });
-      const patch = (await readBody(req)) ?? {};
-      const merge = (a, b, fallback) => patch[b] !== undefined ? patch[b] : (a ?? fallback);
-      run(
-        `UPDATE users SET name=?, email=?, address=?, whatsapp=?, lat=?, lng=?, photo_url=? WHERE uid=?`,
-        merge(base.name, 'name', ''), merge(base.email, 'email', ''),
-        merge(base.address, 'address', ''), merge(base.whatsapp, 'whatsapp', ''),
-        patch.location?.lat ?? base.lat, patch.location?.lng ?? base.lng,
-        merge(base.photo_url, 'photoURL', null), uid,
-      );
-      return json(res, 200, mapUser(get(`SELECT * FROM users WHERE uid=?`, uid)));
-    }
-  }
-
-  /* المسارات غير-API تُترك لخدمة الملفات الثابتة (SPA) */
   if (!pathname.startsWith('/api')) return undefined;
   return json(res, 404, { error: `مسار غير معروف: ${req.method} ${pathname}` });
 }
 
-/* ── خدمة واجهة اللوحة المبنية (dist) من نفس السيرفر ── */
+/* ── Static files ── */
 
 const LOCAL_DIST = path.join(__dirname, 'dist');
-const STATIC_DIST =
-  process.env.STATIC_DIR ??
-  (existsSync(LOCAL_DIST) ? LOCAL_DIST : path.join(__dirname, '..', 'clinic-app', 'dist'));
+const STATIC_DIST = process.env.STATIC_DIR ?? (existsSync(LOCAL_DIST) ? LOCAL_DIST : path.join(__dirname, '..', 'clinic-app', 'dist'));
 const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.ico': 'image/x-icon',
-  '.json': 'application/json; charset=utf-8',
-  '.woff2': 'font/woff2',
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon',
+  '.json': 'application/json; charset=utf-8', '.woff2': 'font/woff2',
   '.webmanifest': 'application/manifest+json',
 };
 
@@ -957,8 +818,7 @@ function handleStatic(req, res, pathname) {
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
     const target = path.normalize(path.join(STATIC_DIST, rel));
     if (target.startsWith(STATIC_DIST) && existsSync(target) && !target.includes('..')) {
-      serveStatic(res, target);
-      return true;
+      serveStatic(res, target); return true;
     }
     const fallback = path.join(STATIC_DIST, 'index.html');
     if (existsSync(fallback)) { serveStatic(res, fallback); return true; }
@@ -972,32 +832,27 @@ const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Max-Age', '600');
   }
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
   handle(req, res, url.pathname, url.searchParams).catch((err) => {
     if (err instanceof DomainError) return json(res, 409, { error: err.message });
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[dawri-server]', msg);
+    console.error('[dawri-server]', err.message);
     return json(res, 500, { error: 'خطأ داخلي في السيرفر.' });
-  }).catch(() => { /* تجاهل */ }).then((served) => {
+  }).catch(() => {}).then((served) => {
     if (!served && !res.writableEnded) {
       const handled = handleStatic(req, res, url.pathname);
       if (!handled && !res.writableEnded) {
         res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end('<h1>404 — الملف غير موجود</h1><p>مجلد dist غير موجود على الخادم.</p>');
+        res.end('<h1>404</h1>');
       }
     }
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`[dawri-server] API جاهز على http://localhost:${PORT} — قاعدة البيانات: ${DB_PATH}`);
+  console.log(`[dawri-server] http://localhost:${PORT} — DB: ${DB_PATH}`);
 });
